@@ -34,6 +34,15 @@ RUN chmod +x /usr/local/bin/start.sh
 # front of it).
 EXPOSE 6080
 
+# Back to the image's own user after the root-only apt step.
+#
+# This was missing, and the consequence was not a permissions error anyone could
+# see: the login wrote a root-owned profile with Default at 0700, the sidecar
+# runs as pwuser (uid 1000), and it reported "no fomo session in the browser
+# profile" for a session that was sitting right there and perfectly valid. Both
+# containers must write this volume as the same uid.
+USER pwuser
+
 ENV DISPLAY=:99 \
     SCREEN=1280x900x24 \
     PROFILE_DIR=/profile \

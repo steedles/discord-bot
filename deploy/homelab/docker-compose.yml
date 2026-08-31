@@ -102,6 +102,17 @@ services:
       # High-priority alerts mirrored to Telegram. Same blank-means-off rule.
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Fomo activity monitor - the BOT's half. The sidecar has its own block
+      # below; these are what decide whether the feature runs and whether the
+      # ingest route mounts at all. Omitting them here means the bot starts with
+      # Fomo off however the .env file reads, because compose only passes what
+      # this block names.
+      FOMO_ENABLED: ${FOMO_ENABLED:-false}
+      FOMO_INGEST_SECRET: ${FOMO_INGEST_SECRET:-}
+      FOMO_ALERT_TELEGRAM_CHAT: ${FOMO_ALERT_TELEGRAM_CHAT:-}
+      FOMO_MAX_EVENT_AGE_MIN: ${FOMO_MAX_EVENT_AGE_MIN:-10}
+      FOMO_STALE_MIN: ${FOMO_STALE_MIN:-60}
+      FOMO_MIN_USD: ${FOMO_MIN_USD:-0}
       # Holdings page - reads these two wallets' on-chain balances directly.
       # Same blank-means-off rule as above.
       HOLDINGS_SOLANA_WALLET: ${HOLDINGS_SOLANA_WALLET:-}
