@@ -36,22 +36,38 @@ websockify --web=/usr/share/novnc 6080 localhost:5900 &
 
 mkdir -p "${PROFILE_DIR}"
 
-echo "==> launching Chromium against ${PROFILE_DIR}"
-echo "    open the noVNC page, log into Fomo, confirm the feed loads, then stop this container"
-# The same profile directory the sidecar will use. Chrome locks it, which is why
-# the sidecar must be stopped while this runs - see README.md.
-/ms-playwright/chromium-*/chrome-linux/chrome \
-  --user-data-dir="${PROFILE_DIR}" \
-  --no-sandbox \
-  --disable-dev-shm-usage \
-  --no-first-run \
-  --no-default-browser-check \
-  --window-position=0,0 \
-  --window-size=1280,880 \
-  "${START_URL}" &
+# fluxbox pops an xmessage complaining it has no wallpaper setter. It is
+# harmless but it sits on top of the browser, in the way of the login.
+( sleep 3; pkill -f "xmessage" 2>/dev/null || true ) &
 
-# If the browser is closed the container has no further purpose, but the desktop
-# should outlive it so a mis-click does not end the session before login.
-wait -n
-echo "==> a process exited; container staying up so the desktop survives a closed window"
-sleep infinity
+CHROME="$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null | head -1)"
+[[ -x "$CHROME" ]] || { echo "no chromium found under /ms-playwright" >&2; exit 1; }
+
+echo "==> launching ${CHROME} against ${PROFILE_DIR}"
+echo "    open the noVNC page, log into Fomo, confirm the feed loads, then stop this container"
+
+# Supervised in a loop, in the FOREGROUND, and deliberately outside `set -e`.
+#
+# The previous version backgrounded Chromium and ended on `wait -n`. Two things
+# went wrong with that: `wait -n` returns the exit status of whichever child
+# died, and under `set -e` a non-zero status aborts the script instantly - so
+# closing the browser window killed PID 1, and the whole container with it,
+# before the "stay up" line below could ever run. That is exactly what happened
+# mid-login.
+#
+# Now a closed or crashed window simply reopens. The desktop, the VNC server and
+# the session outlive it, because none of them are this process.
+set +e
+while true; do
+  "$CHROME" \
+    --user-data-dir="${PROFILE_DIR}" \
+    --no-sandbox \
+    --disable-dev-shm-usage \
+    --no-first-run \
+    --no-default-browser-check \
+    --window-position=0,0 \
+    --window-size=1280,880 \
+    "${START_URL}"
+  echo "==> chromium exited (rc=$?); reopening in 3s - close the CONTAINER when you are done, not the window"
+  sleep 3
+done
