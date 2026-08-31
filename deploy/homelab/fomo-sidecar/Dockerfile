@@ -35,22 +35,27 @@ ENV NODE_ENV=production
 # So the browser runs headed against a virtual display. `xvfb-run` is a few MB
 # and removes an entire class of "works on my machine, silently does nothing in
 # the container" failure.
+# Everything root-only happens here, in one block, before dropping privileges.
+# x11-utils supplies xdpyinfo, which the entrypoint uses to wait for the display
+# to actually accept connections - Chromium started against a half-open display
+# fails in ways that read as application errors rather than as a missing X server.
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends xvfb \
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb x11-utils \
     && rm -rf /var/lib/apt/lists/*
-USER pwuser
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # The image ships this user. The browser profile is a mounted volume and must be
-# writable by it, so the compose file sets the same uid on the volume.
+# writable by it, which is why both this container and fomo-login write it as
+# uid 1000 - a root-owned profile is unreadable here and reports as "no session".
 USER pwuser
 
 # No healthcheck on purpose. "Chrome is running" is not the question - the
 # question is whether events are arriving, which only the bot can judge, from
 # the heartbeats this process sends it.
-# -a picks a free display number; --server-args sizes it to match the viewport.
-CMD ["xvfb-run", "-a", "--server-args=-screen 0 1280x900x24", "node", "dist/index.js"]
+CMD ["/usr/local/bin/entrypoint.sh"]
