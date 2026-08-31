@@ -1,0 +1,142 @@
+# Homelab stack for the crypto Discord bot.
+#
+#   mongo       - persistent store for alerts, feature config and sessions
+#   bot         - the Discord bot + dashboard, internal only (cloudflared fronts it)
+#   cloudflared - named tunnel exposing the dashboard on its public hostname
+#
+# Driven by deploy/homelab/deploy.sh (run from your Mac). Variables come from
+# deploy/homelab/.env.homelab, which deploy.sh ships and passes as --env-file.
+
+name: discord-bot
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping")']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  bot:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # Bound to loopback only - the LAN still can't reach it, but the host
+    # itself can, which is what lets `tailscale serve` front it as a fallback
+    # path when the Cloudflare tunnel's public hostname is unavailable.
+    ports:
+      - '127.0.0.1:${DASHBOARD_PORT:-4300}:${DASHBOARD_PORT:-4300}'
+    volumes:
+      - bot-logs:/var/log/bot
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-discord_bot}
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Written to the named volume below, so a redeploy does not destroy the
+      # logs the redeploy is usually followed by reading.
+      LOG_DIR: /var/log/bot
+      PRICE_POLL_SECONDS: ${PRICE_POLL_SECONDS:-60}
+      LAUNCH_POLL_SECONDS: ${LAUNCH_POLL_SECONDS:-45}
+      TRACK_POLL_SECONDS: ${TRACK_POLL_SECONDS:-60}
+      ENABLE_PUMPPORTAL: ${ENABLE_PUMPPORTAL:-true}
+      ENABLE_MESSAGE_CONTENT: ${ENABLE_MESSAGE_CONTENT:-true}
+      # Off until validated against a real Solana RPC - see CLAUDE.md /
+      # docs/11-RUG-SIGNATURE.md. Neither the automatic scan nor /rugcheck
+      # runs while this is false.
+      ENABLE_RUG_SIGNATURE_CHECK: ${ENABLE_RUG_SIGNATURE_CHECK:-true}
+      # Volume monitor. Everything below is optional: with no Helius key and no
+      # RPC URLs the monitor still runs spike and momentum alerts on every chain
+      # and reports whale detection as unavailable rather than guessing at it.
+      MONITOR_ENABLED: ${MONITOR_ENABLED:-true}
+      MONITOR_POLL_SECONDS: ${MONITOR_POLL_SECONDS:-60}
+      MONITOR_MAX_TOKENS: ${MONITOR_MAX_TOKENS:-120}
+      MONITOR_STATUS_CHANNEL_ID: ${MONITOR_STATUS_CHANNEL_ID:-}
+      HELIUS_API_KEY: ${HELIUS_API_KEY:-}
+      HELIUS_WEBHOOK_SECRET: ${HELIUS_WEBHOOK_SECRET:-}
+      HELIUS_WEBHOOK_URL: ${HELIUS_WEBHOOK_URL:-}
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-}
+      BSC_RPC_URL: ${BSC_RPC_URL:-}
+      BASE_RPC_URL: ${BASE_RPC_URL:-}
+      # Blank is fine - config.ts falls back to Robinhood's keyless public RPC.
+      ROBINHOOD_RPC_URL: ${ROBINHOOD_RPC_URL:-}
+      # Websockets turn the poll into a push. A chain without one keeps working
+      # at poll speed, so every one of these is safe to leave blank.
+      ETHEREUM_WS_URL: ${ETHEREUM_WS_URL:-}
+      BSC_WS_URL: ${BSC_WS_URL:-}
+      BASE_WS_URL: ${BASE_WS_URL:-}
+      ROBINHOOD_WS_URL: ${ROBINHOOD_WS_URL:-}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      SOLANA_WS_URL: ${SOLANA_WS_URL:-}
+      DASHBOARD_ENABLED: ${DASHBOARD_ENABLED:-true}
+      DASHBOARD_PORT: ${DASHBOARD_PORT:-4300}
+      DASHBOARD_HOST: 0.0.0.0
+      DASHBOARD_URL: ${DASHBOARD_URL}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_DAYS: ${SESSION_DAYS:-7}
+      # Login + password accounts. Blank disables that sign-in path entirely.
+      DASHBOARD_USERS: ${DASHBOARD_USERS:-}
+      # Private signal intake. Blank URL or blank token means no request is ever
+      # made, so a deploy that does not want it simply omits them from
+      # .env.homelab - which is why every one of these carries a blank default.
+      # NOTE: the URL is resolved from inside this container, so "localhost" is
+      # the container itself. Use the host's LAN IP, or the intake's service
+      # name if it shares this compose network.
+      SIGNAL_INTAKE_URL: ${SIGNAL_INTAKE_URL:-}
+      SIGNAL_INTAKE_TOKEN: ${SIGNAL_INTAKE_TOKEN:-}
+      SIGNAL_INTAKE_SOURCE: ${SIGNAL_INTAKE_SOURCE:-fomo-scanner}
+      SIGNAL_INTAKE_CHAINS: ${SIGNAL_INTAKE_CHAINS:-solana}
+      # High-priority alerts mirrored to Telegram. Same blank-means-off rule.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Holdings page - reads these two wallets' on-chain balances directly.
+      # Same blank-means-off rule as above.
+      HOLDINGS_SOLANA_WALLET: ${HOLDINGS_SOLANA_WALLET:-}
+      HOLDINGS_EVM_WALLET: ${HOLDINGS_EVM_WALLET:-}
+      HOLDINGS_EVM_CHAINS: ${HOLDINGS_EVM_CHAINS:-ethereum,base,robinhood}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:' + (process.env.DASHBOARD_PORT || 4300) + '/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # The image runs as a non-root uid that can't read the host-owned (0600/0400)
+    # mounted config + creds; run as root so it can, without loosening creds perms.
+    user: root
+    command: ['tunnel', '--no-autoupdate', '--config', '/etc/cloudflared/config.yml', 'run']
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro # config.yml + <tunnel-id>.json (shipped by deploy.sh)
+    depends_on:
+      bot:
+        condition: service_healthy
+
+volumes:
+  # Named volume - alerts, feature config and sessions live here and survive
+  # redeploys. Never remove this without an explicit decision.
+  mongo-data:
+  # Dated log files, pruned after 14 days by the app. Survives `up --build`,
+  # which is the whole point: Docker's own logs do not.
+  bot-logs:

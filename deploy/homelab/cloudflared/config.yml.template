@@ -1,0 +1,15 @@
+# Cloudflared ingress for the steedlescrypto named tunnel, matching the existing
+# dohbelisk.com per-app tunnel pattern. deploy.sh renders the real config.yml
+# from this template - filling TUNNEL_ID and SUBDOMAIN - and ships it plus the
+# tunnel credentials JSON into deploy/homelab/cloudflared/ on the homelab, where
+# the cloudflared container mounts them read-only.
+#
+# DO NOT commit the rendered config.yml or the <id>.json credentials (gitignored).
+
+tunnel: __TUNNEL_ID__
+credentials-file: /etc/cloudflared/__TUNNEL_ID__.json
+
+ingress:
+  - hostname: __SUBDOMAIN__
+    service: http://bot:__DASHBOARD_PORT__
+  - service: http_status:404

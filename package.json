@@ -1,0 +1,55 @@
+{
+  "name": "discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Crypto trading Discord bot - price alerts + new launch scanner (Solana + EVM)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node scripts/copy-public.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "commands:deploy": "tsx src/scripts/deploy-commands.ts",
+    "commands:clear": "tsx src/scripts/deploy-commands.ts --clear",
+    "smoke": "tsx src/scripts/smoke.ts",
+    "brief": "tsx src/scripts/brief.ts",
+    "ta": "tsx src/scripts/ta.ts",
+    "batch-check": "tsx src/scripts/batch-check.ts",
+    "help-preview": "tsx src/scripts/help-preview.ts",
+    "alert-preview": "tsx src/scripts/alert-preview.ts",
+    "chart-preview": "tsx src/scripts/chart-preview.ts",
+    "telegram-watch-test": "tsx src/scripts/telegram-watch-test.ts",
+    "store-check": "tsx src/scripts/store-check.ts",
+    "rug-check-validate": "tsx src/scripts/rug-check-validate.ts",
+    "dashboard:preview": "tsx src/scripts/dashboard-preview.ts",
+    "dashboard:hash": "tsx src/scripts/hash-password.ts",
+    "import:wallets": "tsx src/scripts/import-tracked-wallets.ts",
+    "tunnel": "node scripts/tunnel.mjs",
+    "intents:check": "tsx src/scripts/check-intents.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^10.1.2",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.11.0",
+    "mongodb": "^7.5.0",
+    "pino": "^10.3.1",
+    "viem": "^2.55.13",
+    "ws": "^8.21.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "pino-pretty": "^13.1.2",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

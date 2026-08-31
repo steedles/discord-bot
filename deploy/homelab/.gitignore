@@ -1,0 +1,4 @@
+# Secrets and generated files - never commit these.
+.env.homelab
+cloudflared/config.yml
+cloudflared/*.json

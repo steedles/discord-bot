@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Privacy Policy · SteedlesCrypto</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>%E2%97%A2</text></svg>"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand"><span class="tick">◢</span> SteedlesCrypto</div>
+        <div class="spacer"></div>
+        <a class="btn btn-sm" href="/">Dashboard</a>
+      </header>
+
+      <article class="doc">
+        <h1>Privacy Policy</h1>
+        <div class="updated">Last updated 31 July 2026</div>
+
+        <p>
+          SteedlesCrypto (&ldquo;the bot&rdquo;) is a Discord bot providing crypto price lookups,
+          price alerts, new-token scanning and third-party rug checks. This policy describes exactly
+          what it stores, what it does not, and who else sees your data.
+        </p>
+
+        <p>
+          The bot is operated privately by an individual and is self-hosted. It is not a company
+          product and is provided free of charge.
+        </p>
+
+        <h2>1. What the bot stores</h2>
+
+        <p>
+          The bot stores the minimum needed to do its job. Every field it keeps is listed below —
+          there is nothing else.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>What</th>
+              <th>Why</th>
+              <th>Kept for</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Server, channel and feature settings, plus the Discord user ID of whoever last
+                changed them</td>
+              <td>So each channel behaves the way its admins configured it</td>
+              <td>Until deleted, or the bot leaves the server</td>
+            </tr>
+            <tr>
+              <td>Price alerts: your Discord user ID, the server and channel, the token address and
+                your target price</td>
+              <td>To notify you when a token crosses your target</td>
+              <td>Until the alert fires or you delete it</td>
+            </tr>
+            <tr>
+              <td>Coin trackers: your Discord user ID, the server and channel, and the token and
+                pool you asked to watch</td>
+              <td>To tell you when that coin&rsquo;s 1-minute trend turns</td>
+              <td>Until you remove it, or its chart goes dead</td>
+            </tr>
+            <tr>
+              <td>Dashboard sessions: your Discord user ID, username, avatar reference, and the IDs
+                of servers where you hold Manage Server</td>
+              <td>To keep you signed in and show only your servers</td>
+              <td>7 days, then deleted automatically</td>
+            </tr>
+            <tr>
+              <td>A record of which tokens have already been posted to which channel</td>
+              <td>To avoid posting the same token twice</td>
+              <td>14 days, then deleted automatically</td>
+            </tr>
+            <tr>
+              <td>Newly created token addresses seen on public blockchain feeds</td>
+              <td>To detect when a new token reaches a real exchange</td>
+              <td>48 hours, then deleted automatically</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>2. What the bot does not store</h2>
+
+        <div class="callout">
+          <strong>Message content is never stored.</strong> The Token Brief feature reads messages to
+          find contract addresses in them. That reading happens in memory only. No message text,
+          embed, attachment, author name or timestamp is written to disk or database at any point.
+          The only thing taken from a message is the token address itself, which is used to query a
+          rug checker and then discarded.
+        </div>
+
+        <p>The bot also does not collect, store or process:</p>
+
+        <ul>
+          <li>Your email address, real name, phone number or physical address</li>
+          <li>Your wallet addresses, balances, holdings or transaction history</li>
+          <li>Direct messages, voice activity, or any channel the bot has not been given access to</li>
+          <li>Message history — it only sees messages posted while it is online and present</li>
+          <li>IP addresses, device fingerprints, cookies for tracking, or any analytics</li>
+        </ul>
+
+        <p>
+          The only cookie set is a sign-in session cookie for the dashboard. It contains a random
+          session identifier and nothing else. It is not used for tracking and there are no
+          third-party cookies.
+        </p>
+
+        <h2>3. Reading messages</h2>
+
+        <p>
+          The bot uses Discord&rsquo;s <strong>Message Content</strong> permission. It is used for
+          one purpose: spotting contract addresses so it can look those tokens up. This applies
+          only in channels where a server administrator has explicitly switched the Token Brief
+          feature on, and only where the bot has been given access.
+        </p>
+
+        <p>
+          The resulting summary is posted in that channel, or sent as a direct message if the
+          channel is configured that way. It contains only public market and contract data about
+          the token &mdash; never anything about the person who posted it, beyond their display
+          name and a link back to their message when it is sent privately.
+        </p>
+
+        <p>
+          If Token Brief is switched off — which is the default — the bot ignores messages entirely.
+        </p>
+
+        <h2>4. Who else receives data</h2>
+
+        <p>
+          To answer a question about a token, the bot queries public third-party services. It sends
+          them <strong>only the token contract address</strong>. It never sends your identity, your
+          server, your channel, or any message text.
+        </p>
+
+        <ul>
+          <li><strong>DexScreener</strong> — prices, liquidity and trading pairs</li>
+          <li><strong>GeckoTerminal</strong> — one-minute price candles for a pool, used by the
+            coin tracker</li>
+          <li><strong>RugCheck</strong> — Solana token risk reports</li>
+          <li><strong>GoPlus Security</strong> — EVM token contract properties</li>
+          <li><strong>honeypot.is</strong> — simulates a buy and sell to detect honeypots on
+            Ethereum, BSC and Base</li>
+          <li><strong>PumpPortal</strong> — a public feed of new Solana tokens (receive-only; nothing is sent)</li>
+        </ul>
+
+        <p>
+          <strong>Discord</strong> necessarily processes everything the bot sends and receives, under
+          <a href="https://discord.com/privacy" target="_blank" rel="noopener">Discord&rsquo;s own privacy policy</a>.
+          <strong>Cloudflare</strong> routes traffic to the dashboard and may log connection metadata
+          under its own policy.
+        </p>
+
+        <p>
+          Nothing is sold, rented, or shared for advertising. There is no advertising in this
+          service and no data is shared with advertisers or data brokers.
+        </p>
+
+        <h2>5. Where data is held</h2>
+
+        <p>
+          Data is stored in a database on self-hosted hardware in South Africa, reachable from the
+          internet only through an encrypted Cloudflare tunnel. Access is restricted to the
+          operator. The dashboard requires signing in with Discord, and only shows servers where you
+          hold the Manage Server permission.
+        </p>
+
+        <p>
+          No system is perfectly secure. This is a personal, self-hosted project and is not
+          certified against any security standard.
+        </p>
+
+        <h2>6. Your choices</h2>
+
+        <ul>
+          <li><strong>Delete your alerts:</strong> run <code>/alert clear</code> in the server, which
+            removes all of them immediately.</li>
+          <li><strong>Stop the bot reading messages in a channel:</strong> ask an admin to disable
+            Token Brief there, or remove the bot&rsquo;s access to the channel.</li>
+          <li><strong>Sign out of the dashboard:</strong> use the Sign out button, which deletes the
+            session record.</li>
+          <li><strong>Remove everything for a server:</strong> remove the bot from the server. Ask
+            the operator to purge any remaining stored settings.</li>
+          <li><strong>Request access or deletion:</strong> contact the operator using the details
+            below. Requests are handled manually and honoured within 30 days.</li>
+        </ul>
+
+        <p>
+          Depending on where you live you may have rights under laws such as the GDPR or South
+          Africa&rsquo;s POPIA, including the right to access, correct, delete or object to
+          processing of your data. The contact below is the route for exercising them.
+        </p>
+
+        <h2>7. Children</h2>
+
+        <p>
+          The bot is not directed at children. Discord requires users to be at least 13, or older
+          where local law sets a higher age. Do not use this bot if you do not meet Discord&rsquo;s
+          minimum age.
+        </p>
+
+        <h2>8. Changes</h2>
+
+        <p>
+          This policy may change as the bot changes. The date at the top reflects the current
+          version. Material changes will be announced in servers where the bot is active.
+        </p>
+
+        <h2>9. Contact</h2>
+
+        <p>
+          Questions, access requests and deletion requests:
+          <a href="mailto:wayne@steedman.co.za">wayne@steedman.co.za</a>
+        </p>
+
+        <div class="doclinks">
+          <a href="/terms">Terms of Service</a>
+          <a href="/">Dashboard</a>
+        </div>
+      </article>
+    </div>
+  </body>
+</html>

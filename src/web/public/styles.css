@@ -1,0 +1,1880 @@
+/* =========================================================================
+   Trading-terminal brutalism, in Kanto Labs colours.
+   Hairline rules, sharp corners, tabular figures, one signal-green accent.
+   Dark only - this is a tool that lives next to a chart, not a marketing page.
+
+   The palette is sampled from the Kanto Labs brand rather than eyeballed: the
+   violet and electric blue are the two halves of the wordmark's gradient, the
+   green is the one the profit cards print in, and the grounds come from the
+   neon-city artwork behind them. Keeping those exact values means the dashboard
+   and anything posted in the server read as the same product.
+
+   Structure is untouched. Only the fourteen tokens below changed, which is what
+   makes a retheme a palette edit rather than a rewrite.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  /* Grounds: the deep purple-navy of the city artwork, darkened for a UI that
+     is read for minutes at a time rather than glanced at. */
+  --bg: #08061a;
+  --bg-grid: #0c0a2f;
+  --panel: #12102b;
+  --panel-hi: #1a1740;
+  --line: #2a2154;
+  --line-hi: #3d2f6e;
+
+  /* Text carries a slight violet tint so it sits on the purple ground rather
+     than on top of it. Pure neutral grey reads as a foreign layer here. */
+  --text: #c9c6e8;
+  --text-hi: #f4f2ff;
+  --muted: #7c74a8;
+  --faint: #4a4270;
+
+  /* #2EED2E is the exact green the Kanto profit cards print in. */
+  --on: #2eed2e;
+  --on-dim: #2eed2e1a;
+  --off: #ff4d6e;
+  --warn: #fb8c02;
+
+  /* The wordmark gradient: KANTO violet into LABS electric blue.
+     Both are brand-exact. The blue is dark and heavily saturated, so it is for
+     gradients, borders and glow - never for text on a dark ground, where it
+     fails contrast badly. */
+  --brand-1: #b631f8;
+  --brand-2: #002ff0;
+  --brand-soft: #b631f81f;
+
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: 'IBM Plex Sans', ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+
+  --pad: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Faint grid + vignette so the background has depth rather than being flat. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+a {
+  color: var(--on);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/* ---------- layout ------------------------------------------------------ */
+
+.shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 var(--pad) 96px;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--bg) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* The wordmark gradient again, as a hairline under the whole header. */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--brand-1), var(--brand-2) 60%, transparent);
+  opacity: 0.55;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-hi);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.brand .tick {
+  /* The one place the brand gradient appears as itself. Falls back to the
+     violet on any engine that will not clip a gradient to text. */
+  color: var(--brand-1);
+  background: linear-gradient(100deg, var(--brand-1), #5c73e0 55%, var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.brand {
+  text-shadow: 0 0 18px var(--brand-soft);
+}
+
+.brand .ver {
+  color: var(--faint);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+/* ---------- micro type -------------------------------------------------- */
+
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.hint {
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---------- controls ---------------------------------------------------- */
+
+select,
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'] {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-hi);
+  background: var(--bg);
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  width: 100%;
+}
+
+select:focus,
+input[type='text']:focus,
+input[type='email']:focus,
+input[type='password']:focus,
+input[type='number']:focus {
+  border-color: var(--on);
+  box-shadow: 0 0 0 3px var(--on-dim);
+}
+
+select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.guild-select {
+  width: auto;
+  min-width: 190px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 7px 13px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+  color: var(--text-hi);
+}
+
+.btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--on);
+  border-color: var(--on);
+  color: #04120c;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4dffc0;
+  border-color: #4dffc0;
+  color: #04120c;
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--off);
+  color: var(--off);
+}
+
+.btn-sm {
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+/* ---------- toggle ------------------------------------------------------ */
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  flex: 0 0 40px;
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  background: var(--bg);
+  padding: 0;
+  transition: all 0.16s ease;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--faint);
+  border-radius: 1px;
+  transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle[aria-checked='true'] {
+  border-color: var(--on);
+  background: var(--on-dim);
+}
+
+.toggle[aria-checked='true']::after {
+  left: 22px;
+  background: var(--on);
+  box-shadow: 0 0 10px var(--on);
+}
+
+.toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--on-dim);
+}
+
+/* ---------- stat strip -------------------------------------------------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+
+.stat {
+  background: var(--panel);
+  padding: 14px 16px;
+}
+
+.stat .n {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-hi);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.stat .n.accent {
+  color: var(--on);
+}
+
+.stat .k {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+/* ---------- feature block ----------------------------------------------- */
+
+.feature {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  margin-bottom: 20px;
+  animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.feature-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.feature-icon {
+  font-size: 19px;
+  line-height: 1.3;
+  filter: saturate(1.15);
+}
+
+.feature-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-hi);
+  letter-spacing: 0.02em;
+}
+
+.feature-kind {
+  display: inline-block;
+  margin-left: 9px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 1px 5px;
+  vertical-align: 2px;
+}
+
+.feature-desc {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  max-width: 62ch;
+}
+
+.feature-cmds {
+  margin-top: 7px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cmd {
+  font-size: 11px;
+  color: var(--on);
+  background: var(--on-dim);
+  border: 1px solid #00e5a033;
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+
+/* ---------- instance rows ----------------------------------------------- */
+
+.instances {
+  display: flex;
+  flex-direction: column;
+}
+
+.instance {
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.instance.on {
+  border-left-color: var(--on);
+}
+
+.instance:last-child {
+  border-bottom: none;
+}
+
+.instance-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 18px;
+}
+
+.instance:hover {
+  background: var(--panel-hi);
+}
+
+.scope {
+  flex: 1;
+  min-width: 0;
+}
+
+.scope-name {
+  color: var(--text-hi);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-name .hash {
+  color: var(--faint);
+}
+
+.scope-meta {
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+.state {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+  min-width: 30px;
+}
+
+.state.on {
+  color: var(--on);
+}
+
+.chev {
+  color: var(--faint);
+  transition: transform 0.18s ease;
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+
+.instance.open .chev {
+  transform: rotate(90deg);
+  color: var(--on);
+}
+
+/* ---------- settings form ----------------------------------------------- */
+
+.settings {
+  display: none;
+  padding: 4px 18px 18px;
+  border-top: 1px dashed var(--line);
+  background: #0c0e13;
+}
+
+.instance.open .settings {
+  display: block;
+  animation: fade 0.22s ease;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 16px 24px;
+  padding: 18px 0;
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.field label.flabel {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.field .fdesc {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: 6px;
+  max-width: 58ch;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.unit {
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.with-unit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* chips for multiselect */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--bg);
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.chip:hover {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--on);
+  color: var(--on);
+  background: var(--on-dim);
+}
+
+/* The role's own colour, so a picker reads like Discord's own role list. */
+.role-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.chips-note {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: 7px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.actions .spacer {
+  flex: 1;
+}
+
+.dirty-flag {
+  font-size: 11px;
+  color: var(--warn);
+  letter-spacing: 0.06em;
+}
+
+/* ---------- add row ----------------------------------------------------- */
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  background: #0c0e13;
+  flex-wrap: wrap;
+}
+
+.add-row select {
+  width: auto;
+  min-width: 210px;
+}
+
+.add-row .label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- signin ------------------------------------------------------ */
+
+.signin {
+  max-width: 460px;
+  margin: 13vh auto 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 40px 36px;
+  text-align: center;
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.signin .tick {
+  font-size: 32px;
+  /* Same brand gradient as the topbar mark. This is the first thing anyone
+     sees, so it is the last place the two surfaces should disagree. */
+  color: var(--brand-1);
+  background: linear-gradient(100deg, var(--brand-1), #5c73e0 55%, var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  filter: drop-shadow(0 0 14px var(--brand-soft));
+}
+
+.signin h1 {
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-hi);
+  margin: 18px 0 10px;
+}
+
+.signin p {
+  font-family: var(--sans);
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 26px;
+  line-height: 1.6;
+}
+
+/* ---------- misc -------------------------------------------------------- */
+
+.empty {
+  padding: 26px 18px;
+  color: var(--faint);
+  font-family: var(--sans);
+  font-size: 13px;
+  text-align: center;
+}
+
+.banner {
+  border: 1px solid var(--line-hi);
+  border-left: 2px solid var(--warn);
+  background: var(--panel);
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--on);
+  box-shadow: 0 0 8px var(--on);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* toasts */
+#toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+}
+
+.toast {
+  border: 1px solid var(--line-hi);
+  border-left: 2px solid var(--on);
+  background: var(--panel);
+  padding: 11px 15px;
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: 0 8px 28px #000a;
+  animation: slide 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+  white-space: pre-line;
+}
+
+.toast.err {
+  border-left-color: var(--off);
+}
+
+@keyframes slide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* ---------- legal / long-form documents -------------------------------- */
+
+.doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 0 80px;
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.doc h1 {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-hi);
+  margin: 8px 0 4px;
+}
+
+.doc .updated {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 32px;
+}
+
+.doc h2 {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--on);
+  margin: 40px 0 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.doc h3 {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-hi);
+  margin: 24px 0 6px;
+}
+
+.doc p {
+  margin: 0 0 14px;
+}
+
+.doc ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.doc li {
+  margin-bottom: 7px;
+}
+
+.doc strong {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+.doc code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg);
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 1px 5px;
+  color: var(--on);
+}
+
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.doc th,
+.doc td {
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.doc th {
+  background: var(--panel);
+  color: var(--text-hi);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.doc .callout {
+  border: 1px solid var(--line-hi);
+  border-left: 2px solid var(--warn);
+  background: var(--panel);
+  padding: 14px 18px;
+  margin: 0 0 26px;
+  font-size: 13.5px;
+}
+
+.doc .callout.danger {
+  border-left-color: var(--off);
+}
+
+.doc .doclinks {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+}
+
+.doc .doclinks a {
+  margin-right: 18px;
+}
+
+@media (max-width: 680px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .fields {
+    grid-template-columns: 1fr;
+  }
+  .instance-head {
+    padding: 12px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ---------- sign-in: email + password ----------------------------------- */
+
+.signin-split {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 18px;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.signin-split::before,
+.signin-split::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.signin-form {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.signin-form .btn {
+  justify-content: center;
+}
+
+.signin-error {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--bad, #e74c3c);
+  text-align: center;
+}
+
+/* ---------- banded thresholds ------------------------------------------- */
+
+.bands {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bands-head,
+.bands-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 28px;
+  gap: 8px;
+  align-items: center;
+}
+
+.bands-head {
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.band-any {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 7px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 2px;
+}
+
+.band-x {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.band-x:hover {
+  color: var(--text-hi);
+  border-color: var(--line-hi);
+}
+
+.btn-small {
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+/* ---------- view tabs ---------------------------------------------------- */
+
+.viewtabs {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+  padding: 2px;
+}
+
+.viewtab {
+  background: none;
+  border: none;
+  border-radius: 1px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.viewtab:hover {
+  color: var(--text-hi);
+}
+
+.viewtab.active {
+  background: var(--panel-hi);
+  color: var(--text-hi);
+}
+
+/* ---------- live charts --------------------------------------------------- */
+
+/*
+ * The board fills the viewport with nothing to scroll - it is meant to sit on
+ * a monitor and be glanced at, not read top-to-bottom like the rest of the
+ * dashboard. `.shell`'s normal max-width and bottom padding exist for the
+ * feature cards and would just waste edge space here, so they are overridden
+ * only while this view is active.
+ */
+body.charts-mode {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.charts-mode .shell {
+  max-width: none;
+  height: 100vh;
+  padding: 0 var(--pad) var(--pad);
+  display: flex;
+  flex-direction: column;
+}
+
+body.charts-mode .topbar {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+.charts-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.charts-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+}
+
+.charts-head h2 {
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+/* The tracked-coins grid and the New Launches column, side by side. */
+.charts-row-outer {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * One grid; a card's position and size come from `order` and a `lg`/`sm`
+ * class set in JS, never from where its markup sits in the DOM - see
+ * `refreshCharts` in app.js for why a card is never moved once attached.
+ * Row heights are explicit fractions of whatever vertical space is left,
+ * rather than an aspect-ratio, because the board has to fit the viewport
+ * exactly - a card sized from its own width could over- or under-fill it.
+ * Even split: the bottom row is the one row of small tiles now (not two),
+ * so it gets the same share as the top row instead of half of it.
+ */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
+  flex: 4;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A fifth column, visually - same width share as one of the grid's four. */
+.launches-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.launches-label {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.launches-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.launches-col .chart-card {
+  flex: 1;
+  min-height: 0;
+}
+
+.chart-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/*
+ * Draws the eye to a card whose data just changed - a new coin joined the
+ * board, or one already showing got hit with a fresh alert. Pure border/glow,
+ * never opacity or transform, so it never so much as flickers the iframe
+ * sitting right under it.
+ */
+@keyframes chart-card-flash {
+  0%,
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  15%,
+  45%,
+  75% {
+    border-color: var(--on);
+    box-shadow: 0 0 0 2px var(--on-dim), 0 0 22px 2px var(--on-dim);
+  }
+  30%,
+  60% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+}
+
+.chart-card.flash {
+  animation: chart-card-flash 1.8s ease-in-out;
+}
+
+.chart-card.lg {
+  grid-column: span 2;
+}
+
+.chart-card.sm {
+  grid-column: span 1;
+}
+
+.chart-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+  padding: 12px;
+}
+
+.chart-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-hi);
+  font-family: var(--sans);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.chart-pin {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.3;
+  filter: grayscale(1);
+  transition: opacity 0.12s ease, filter 0.12s ease;
+}
+
+.chart-pin:hover {
+  opacity: 0.8;
+}
+
+.chart-pin.pinned {
+  opacity: 1;
+  filter: none;
+}
+
+/*
+ * A rug-signature finding (docs/11-RUG-SIGNATURE.md) - persistent, not a
+ * one-shot flash like `.flash` above, since the finding stays true for as
+ * long as the card is on screen.
+ */
+.chart-card.rug-flagged {
+  border-color: var(--off);
+  box-shadow: 0 0 0 1px var(--off), 0 0 24px 2px rgba(255, 77, 110, 0.35);
+}
+
+.chart-card.rug-flagged .chart-label {
+  background: rgba(255, 77, 110, 0.14);
+}
+
+.rug-warning {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  filter: drop-shadow(0 0 4px rgba(255, 77, 110, 0.6));
+}
+
+/*
+ * position: fixed and measured on hover (see positionRugTooltip in app.js) -
+ * .chart-card/.chart-label both clip overflow for the iframe's sake, so
+ * anything anchored inside either would be cut off.
+ */
+.rug-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  max-width: 260px;
+  padding: 9px 11px;
+  background: var(--panel-hi);
+  border: 1px solid var(--off);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-line;
+}
+
+.chart-badge {
+  color: var(--brand-1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-symbol {
+  color: var(--text-hi);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.chart-ca {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.chart-ca:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.chart-ca.copied {
+  color: var(--on);
+}
+
+.chart-age {
+  color: var(--muted);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.chart-card iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: var(--bg);
+}
+
+/*
+ * Below this, 6 tiles can no longer fit the viewport at a readable size - the
+ * no-scroll board is a wide-monitor layout, so narrower screens trade it for a
+ * normal scrolling grid rather than shrinking every chart into uselessness.
+ */
+@media (max-width: 860px) {
+  body.charts-mode {
+    height: auto;
+    overflow: visible;
+  }
+
+  body.charts-mode .shell {
+    height: auto;
+  }
+
+  .charts-row-outer {
+    flex-direction: column;
+  }
+
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(200px, auto);
+    flex: initial;
+  }
+
+  .launches-col {
+    flex-direction: row;
+  }
+
+  .launches-col .chart-card {
+    min-height: 200px;
+  }
+}
+
+@media (max-width: 520px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* A 2-column span on a 1-column grid would overflow the row. */
+  .chart-card.lg,
+  .chart-card.sm {
+    grid-column: span 1;
+  }
+}
+
+/* ---------- my charts (personal board) -------------------------------------- */
+
+.board-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 32px;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.board-empty {
+  grid-column: 1 / -1;
+}
+
+.board-slot {
+  min-width: 0;
+}
+
+/* Lifted out of grid flow for the duration of a drag/resize - see startBoardDrag. */
+.board-slot-dragging {
+  z-index: 20;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
+}
+
+.board-slot-invalid {
+  border-color: var(--off);
+  box-shadow: 0 0 0 1px var(--off);
+}
+
+.board-slot-head {
+  gap: 6px;
+}
+
+.board-slot-drag {
+  flex: 0 0 auto;
+  cursor: grab;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+  touch-action: none;
+}
+
+.board-slot-remove,
+.board-slot-change {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.board-slot-remove:hover,
+.board-slot-change:hover {
+  color: var(--off);
+}
+
+.board-slot-change:hover {
+  color: var(--text);
+}
+
+.board-slot-empty {
+  background: var(--panel);
+  filter: grayscale(0.6);
+}
+
+.board-slot-empty .board-slot-head {
+  filter: none;
+}
+
+.board-slot-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+}
+
+.board-chain-select,
+.board-resolution-select,
+.board-ca-input {
+  width: 100%;
+  background: var(--panel-hi);
+  border: 1px solid var(--line-hi);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.board-ca-input {
+  font-family: var(--mono);
+}
+
+.board-slot-error {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--off);
+  min-height: 14px;
+}
+
+/* Bottom-right corner, overlaid on the card rather than reserving its own row. */
+.board-slot-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.board-slot-resize::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--faint);
+  border-bottom: 2px solid var(--faint);
+  opacity: 0.6;
+}
+
+/* An iframe under the pointer would otherwise swallow move/up events mid-drag. */
+.board-grid.board-interacting iframe {
+  pointer-events: none;
+}
+
+@media (max-width: 860px) {
+  .board-grid {
+    grid-auto-flow: row;
+  }
+}
+
+/* ---------- coin history --------------------------------------------------- */
+
+.history-controls {
+  margin-bottom: 20px;
+}
+
+.history-coin-select {
+  width: auto;
+  min-width: 240px;
+}
+
+.history-panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.history-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+.history-count {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.history-chart-svg {
+  display: block;
+  width: 100%;
+  height: 340px;
+}
+
+.chart-axis-line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+.chart-price-line {
+  fill: none;
+  stroke: var(--on);
+  stroke-width: 1.5;
+}
+
+/* ---------- alert markers on the coin-history chart ---------------------- */
+
+.chart-marker {
+  cursor: pointer;
+}
+
+.marker-guide {
+  opacity: 0.55;
+}
+
+.marker-halo {
+  opacity: 0.16;
+  transition: opacity 0.12s ease, r 0.12s ease;
+}
+
+.marker-dot {
+  transition: r 0.12s ease;
+}
+
+.chart-marker:hover .marker-halo,
+.chart-marker:focus-visible .marker-halo {
+  opacity: 0.3;
+  r: 13;
+}
+
+.chart-marker:hover .marker-dot,
+.chart-marker:focus-visible .marker-dot {
+  r: 7.5;
+}
+
+.marker-tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+
+.chart-marker:hover .marker-tooltip,
+.chart-marker:focus-visible .marker-tooltip {
+  opacity: 1;
+}
+
+.marker-tooltip-bg {
+  fill: var(--panel-hi);
+  stroke: var(--marker-color, var(--line-hi));
+  stroke-width: 1;
+}
+
+.marker-tooltip-line {
+  font-family: var(--sans);
+  font-size: 11px;
+  fill: var(--text);
+}
+
+.marker-tooltip-line.title {
+  font-weight: 600;
+  fill: var(--text-hi);
+}
+
+.marker-tooltip-line.time {
+  fill: var(--muted);
+}
+
+.history-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.history-alert-list {
+  border-top: 1px solid var(--line);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.history-alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  font-family: var(--sans);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-alert-row:last-child {
+  border-bottom: none;
+}
+
+.history-alert-feature {
+  flex: 0 0 auto;
+  color: var(--text-hi);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-alert-trigger {
+  flex: 1;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-alert-time {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* ---------- watchlist ---------------------------------------------------- */
+
+.watchlist-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.watchlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.watchlist-table th {
+  text-align: left;
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-hi);
+  white-space: nowrap;
+}
+
+.watchlist-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.watchlist-table th.num,
+.watchlist-table td.num {
+  text-align: right;
+}
+
+.watchlist-table tbody tr:hover {
+  background: var(--panel);
+}
+
+.watch-symbol {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+.watch-chain {
+  color: var(--faint);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.watch-tag {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-hi);
+  border-radius: 2px;
+  padding: 2px 7px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.watch-tag.manual {
+  color: var(--on);
+}
+
+.watch-tag.warn {
+  color: var(--warn);
+}
+
+.wallet-score-pos {
+  color: var(--on);
+  font-weight: 600;
+}
+
+.wallet-score-neg {
+  color: var(--off);
+  font-weight: 600;
+}
+
+.wallets-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.wallets-search {
+  flex: 1 1 240px;
+  min-width: 160px;
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-hi);
+  padding: 6px 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.wallets-fav-filter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wallets-inactive {
+  opacity: 0.5;
+}
+
+/* ---------- holdings ------------------------------------------------------ */
+
+.holdings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.holdings-grid .chart-card {
+  height: 260px;
+}

@@ -1,0 +1,22 @@
+# Local development MongoDB.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Port 27020 rather than 27017, which is already taken by other projects'
+# containers on this machine. No auth - it is bound to localhost only.
+# Production runs its own Mongo via deploy/homelab/docker-compose.yml.
+
+name: discord-bot-dev
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: discord-bot-mongo
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:27020:27017'
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

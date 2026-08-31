@@ -1,0 +1,5 @@
+# esbuild is a tsx dependency; its postinstall fetches the platform binary.
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@rolldown/binding-linux-s390x-gnu@1.2.4'
