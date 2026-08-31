@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { chromium, type BrowserContext, type Page } from 'playwright-core'
 import { TRADING_ACTIVITY, WS_HOST, config } from './config.js'
 import { Forwarder } from './forward.js'
@@ -55,7 +57,31 @@ class Sidecar {
     }
   }
 
+  /**
+   * Clear the profile lock left by whoever held it last.
+   *
+   * Chromium writes SingletonLock as a symlink naming the HOSTNAME that owns
+   * the profile. Containers get a new hostname on every recreate, and the login
+   * container is a different container again - so the lock always looks foreign
+   * and Chromium refuses to start with rc=21. It cost 44 silent retries in the
+   * login container before anyone looked at an exit code.
+   *
+   * Safe because the sidecar and the login desktop are never meant to run at
+   * once (see fomo-login/README.md) - and if they did, the lock would not save
+   * us anyway, two browsers on one profile corrupt it regardless.
+   */
+  private clearProfileLock(): void {
+    for (const name of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      try {
+        rmSync(join(config.profilePath, name), { force: true })
+      } catch {
+        /* nothing to clear is the normal case */
+      }
+    }
+  }
+
   private async open(): Promise<void> {
+    this.clearProfileLock()
     this.ctx = await chromium.launchPersistentContext(config.profilePath, {
       channel: config.browserChannel,
       headless: config.headless,
