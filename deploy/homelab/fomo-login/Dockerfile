@@ -13,10 +13,17 @@ FROM mcr.microsoft.com/playwright:v1.49.0-jammy
 
 USER root
 
+# ARG, not ENV: needed only while apt runs, and it should not persist into the
+# running container. Without it, tzdata - pulled in as a dependency of the X11
+# packages - opens an interactive "select your geographic area" prompt and the
+# build hangs forever rather than failing. It cost 20 minutes of a build that
+# looked merely slow.
+ARG DEBIAN_FRONTEND=noninteractive
+
 # fluxbox gives the browser a window manager; without one Chrome opens with no
 # decorations and OAuth popups can end up unfocusable.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb x11vnc fluxbox novnc websockify openssl ca-certificates \
+      xvfb x11vnc fluxbox novnc websockify openssl ca-certificates x11-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY start.sh /usr/local/bin/start.sh

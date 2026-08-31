@@ -174,8 +174,14 @@ services:
       START_URL: ${FOMO_APP_URL:-https://fomo.family/token}
     volumes:
       - fomo-profile:/profile
-    # Deliberately no `ports:`. The only route in is the tunnel, which is the
-    # only place access control can be enforced.
+    # Loopback only, exactly as the bot binds above: the LAN cannot reach it,
+    # but the host can, which is what lets `tailscale serve` front it. Reached
+    # over the tailnet at https://dohbelisk.tail2a8e5f.ts.net:8443 - never over
+    # a public hostname. What answers here is a browser holding a live Google
+    # session with a route into the LAN, so "authenticated by being on the
+    # tailnet" is the whole security model and there is no second door.
+    ports:
+      - '127.0.0.1:6080:6080'
     mem_limit: 2g
     shm_size: 512m
 
