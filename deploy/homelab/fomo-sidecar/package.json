@@ -1,0 +1,25 @@
+{
+  "name": "fomo-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drives a real browser against fomo.family and forwards trading_activity to the bot. Separate from the bot because Playwright cannot run in node:alpine and a browser crash must not take the bot with it.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "watch": "FOMO_DRY_RUN=true tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

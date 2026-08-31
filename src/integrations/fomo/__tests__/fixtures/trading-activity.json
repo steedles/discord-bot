@@ -1,0 +1,103 @@
+{
+  "swap_sell": {
+    "type": "swap_sell",
+    "id": "858f6017-ac53-4fb6-a75f-ce1a0657345b",
+    "tradeId": "22ba5fad-30b4-44b2-82e6-6bb51af2559d",
+    "createdAt": "2026-08-31T12:55:41.502Z",
+    "userId": "aefe2ddd-c580-5245-a2f5-e4ed62f7ef10",
+    "displayName": "frank",
+    "userHandle": "frankdegods",
+    "profilePictureLink": "https://prod-fomo-profile-pics.s3.amazonaws.com/470f4ecaa0e57c61a32668f5f54c2bb1_small.jpg",
+    "verified": false,
+    "twitter": "https://x.com/frankdegods",
+    "usdAmount": 10131.345409,
+    "marketCap": 3708676.4762727786,
+    "fdv": 3708676.47646,
+    "price": 0.003622567320805213,
+    "ticker": "CINEMA",
+    "tokenImageUrl": "https://example.invalid/sanitised.png",
+    "tokenAddress": "SANITISED_SOLANA_ADDRESS",
+    "networkId": 4663,
+    "equity": 1974085.8244500896,
+    "isDev": false
+  },
+  "swap_buy": {
+    "type": "swap_buy",
+    "id": "839ef298-1fc0-4e37-bf59-ccb3ee8eab42",
+    "tradeId": "f1fcf371-752a-4e9e-8026-6d14080e6cef",
+    "createdAt": "2026-08-31T12:55:49.098Z",
+    "userId": "aefe2ddd-c580-5245-a2f5-e4ed62f7ef10",
+    "displayName": "frank",
+    "userHandle": "frankdegods",
+    "profilePictureLink": "https://prod-fomo-profile-pics.s3.amazonaws.com/470f4ecaa0e57c61a32668f5f54c2bb1_small.jpg",
+    "verified": false,
+    "twitter": "https://x.com/frankdegods",
+    "usdAmount": 4997.547526,
+    "marketCap": 1971859.0222999998,
+    "fdv": 1971859.0222999998,
+    "price": 0.002213770132066037,
+    "ticker": "QC",
+    "tokenImageUrl": "https://example.invalid/sanitised.png",
+    "tokenAddress": "0xSANITISED_EVM_ADDRESS",
+    "networkId": 4663,
+    "equity": 1974085.8244500896,
+    "isDev": false
+  },
+  "thesis": {
+    "type": "thesis",
+    "id": "6cac2f02-0129-4a77-ae63-30db1616f628",
+    "tradeId": "f1fcf371-752a-4e9e-8026-6d14080e6cef",
+    "createdAt": "2026-08-31T12:56:41.902Z",
+    "userId": "aefe2ddd-c580-5245-a2f5-e4ed62f7ef10",
+    "displayName": "frank",
+    "userHandle": "frankdegods",
+    "profilePictureLink": "https://prod-fomo-profile-pics.s3.amazonaws.com/470f4ecaa0e57c61a32668f5f54c2bb1_small.jpg",
+    "verified": false,
+    "twitter": null,
+    "comment": {
+      "id": "6cac2f02-0129-4a77-ae63-30db1616f628",
+      "userId": "aefe2ddd-c580-5245-a2f5-e4ed62f7ef10",
+      "tradeId": "f1fcf371-752a-4e9e-8026-6d14080e6cef",
+      "comment": "quantum squeeze",
+      "createdAt": "2026-08-31T12:56:41.902Z",
+      "parentId": null,
+      "numLikes": 0,
+      "tokenAddress": "0xSANITISED_EVM_ADDRESS",
+      "networkId": 4663,
+      "reactions": {
+        "counts": {
+          "likeCount": 0
+        },
+        "reactions": {
+          "like": false
+        }
+      },
+      "olderThesis": 0,
+      "newerThesis": 0,
+      "shortCommentSegments": [
+        {
+          "text": "quantum squeeze",
+          "link": null,
+          "provider": null
+        }
+      ]
+    },
+    "numReplies": 0,
+    "authorTrade": {
+      "humanTokenAmount": 10371738.352753697,
+      "usdValue": 15235.929331857467,
+      "unrealizedPnlUsd": 4959.758321338742,
+      "realizedPnlUsd": 0,
+      "percentageUnrealizedPnl": 48.264653403119844,
+      "percentageRealizedPnl": 0,
+      "closedAt": null
+    },
+    "threshold": 15235.929331857467,
+    "tokenAddress": "0xSANITISED_EVM_ADDRESS",
+    "networkId": 4663,
+    "ticker": "QC",
+    "tokenImageUrl": "https://example.invalid/sanitised.png",
+    "equity": 1974085.8244500896,
+    "isDev": false
+  }
+}

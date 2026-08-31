@@ -4,6 +4,8 @@ import type { TurnSignal } from '../analysis/trend.js'
 import type { Alert, CoinTracker, RugCheck, TrackedWallet } from '../db/models.js'
 import { explorerUrl, getChain } from '../market/chains.js'
 import { tradeLinksMarkdown } from '../market/trade-links.js'
+import { fomoUrl } from '../market/fomo.js'
+import type { FomoActivityEvent } from '../integrations/fomo/types.js'
 import { hasSocials, pairAgeMinutes as dexPairAgeMinutes, type DexPair } from '../market/dexscreener.js'
 import { pairAgeMinutes } from '../monitor/detect/gates.js'
 import type { AlertKind, Trigger } from '../monitor/detect/types.js'
@@ -22,6 +24,7 @@ import type { RugCheckResult } from '../risk/rugSignature.js'
 const GREEN = 0x2ecc71
 const RED = 0xe74c3c
 const GREY = 0x95a5a6
+const BLUE = 0x5865f2
 
 function trendColor(pair: DexPair): number {
   const change = pair.priceChange?.h24
@@ -969,4 +972,101 @@ export function noticeEmbed(message: string): EmbedBuilder {
 
 export function successEmbed(message: string): EmbedBuilder {
   return new EmbedBuilder().setColor(GREEN).setDescription(`✅ ${message}`)
+}
+
+/**
+ * A buy or sell by a trader the Fomo account follows.
+ *
+ * Reports what Fomo actually sends and nothing more. There is no transaction
+ * hash and no token amount on these payloads, so there is no explorer link and
+ * no position size - inventing either from price and USD value would be the
+ * same failure as approximating a whale buy from volume over trade count.
+ */
+export function fomoTradeEmbed(event: FomoActivityEvent): EmbedBuilder {
+  const buy = event.kind === 'BUY'
+  const chain = event.chainId ? getChain(event.chainId) : undefined
+  const who = event.traderName ?? event.traderHandle ?? 'someone'
+  const ticker = event.ticker ?? 'a token'
+
+  const embed = new EmbedBuilder()
+    .setColor(buy ? GREEN : RED)
+    .setTitle(`${buy ? '🟢' : '🔴'} ${who} ${buy ? 'bought' : 'sold'} ${ticker}`)
+    .setDescription(
+      statBlock(
+        statLine('Size', [event.usdAmount !== undefined && formatCompactUsd(event.usdAmount)]),
+        statLine('Market cap', [event.marketCap !== undefined && formatCompactUsd(event.marketCap)]),
+        statLine('Price', [event.price !== undefined && formatUsdPrice(event.price)]),
+      ),
+    )
+    // Fomo's own timestamp, not ours: an event delayed in our pipeline should
+    // still read as the moment the trade happened.
+    .setTimestamp(event.createdAt)
+    .setFooter({
+      // Naming the chain as unknown is deliberate - networkId 143 is real and
+      // unidentified, and guessing it would put a trade on the wrong chain.
+      text: `fomo · ${chain?.label ?? (event.networkId ? `network ${event.networkId}` : 'unknown chain')}`,
+    })
+
+  const links = fomoLinks(event)
+  if (links) embed.addFields({ name: 'Links', value: links })
+  return embed
+}
+
+/**
+ * A thesis - the written reasoning a trader attached to a trade.
+ *
+ * Posted as its own message rather than folded into the trade it belongs to.
+ * They arrive as separate events about a minute apart, so merging them would
+ * mean holding every buy back on the chance a thesis follows, which would make
+ * the fastest signal here the slowest.
+ */
+export function fomoThesisEmbed(event: FomoActivityEvent): EmbedBuilder {
+  const chain = event.chainId ? getChain(event.chainId) : undefined
+  const who = event.traderName ?? event.traderHandle ?? 'someone'
+  const ticker = event.ticker ?? 'a token'
+  const p = event.position
+
+  const embed = new EmbedBuilder()
+    .setColor(BLUE)
+    .setTitle(`💭 ${who} on ${ticker}`)
+    .setDescription(
+      [
+        // Discord embeds cap at 4096; leave headroom for the stat block below.
+        event.thesis ? `> ${event.thesis.slice(0, 1500).replace(/\n/g, '\n> ')}` : '_no text_',
+        '',
+        statBlock(
+          statLine('Position', [p?.usdValue !== undefined && formatCompactUsd(p.usdValue)]),
+          statLine('Unrealised', [
+            p?.percentageUnrealizedPnl !== undefined && formatPercent(p.percentageUnrealizedPnl),
+          ]),
+          statLine('Market cap', [event.marketCap !== undefined && formatCompactUsd(event.marketCap)]),
+        ),
+      ].join('\n'),
+    )
+    .setTimestamp(event.createdAt)
+    .setFooter({
+      text: `fomo · ${chain?.label ?? (event.networkId ? `network ${event.networkId}` : 'unknown chain')}`,
+    })
+
+  const links = fomoLinks(event)
+  if (links) embed.addFields({ name: 'Links', value: links })
+  return embed
+}
+
+/**
+ * Links for a Fomo event.
+ *
+ * Reuses `fomoUrl`, whose chain-slug map was confirmed against real links rather
+ * than guessed - a chain it does not cover produces no link instead of a 404,
+ * which is the right outcome in an alert someone may act on.
+ */
+function fomoLinks(event: FomoActivityEvent): string | undefined {
+  if (!event.chainId || !event.tokenAddress) return undefined
+  const parts: string[] = []
+  const fomo = fomoUrl(event.chainId, event.tokenAddress)
+  if (fomo) parts.push(`[fomo](${fomo})`)
+  const explorer = explorerUrl(event.chainId, event.tokenAddress)
+  if (explorer) parts.push(`[explorer](${explorer})`)
+  parts.push(`\`${truncateAddress(event.tokenAddress)}\``)
+  return parts.join(' · ')
 }

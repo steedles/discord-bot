@@ -194,6 +194,49 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN: optionalString,
   TELEGRAM_CHAT_ID: optionalString,
 
+  // --- Fomo.family activity monitor (optional, off by default) ---
+  /**
+   * Real-time buys, sells and theses from traders the Fomo account follows.
+   *
+   * Ingested by a separate `fomo-sidecar` container which drives a real browser
+   * and forwards raw payloads here - Playwright cannot run in this image
+   * (node:alpine, musl) and a browser crash must not be able to take the bot
+   * with it. Off unless both this and FOMO_INGEST_SECRET are set.
+   *
+   * Fomo has no public API. See docs/FOMO-INTEGRATION-PLAN.md, including what
+   * it says about their terms of service.
+   */
+  FOMO_ENABLED: boolish(false),
+  /** Shared secret the sidecar presents on POST /api/fomo/events. */
+  FOMO_INGEST_SECRET: optionalString,
+  /**
+   * Events older than this are discarded on arrival, before dedup sees them.
+   *
+   * A restart resubscribes and Fomo may replay recent activity. Posting an
+   * hour-old trade as though it just happened is worse than missing it - the
+   * same call whale-buys makes about its log sweep.
+   */
+  FOMO_MAX_EVENT_AGE_MIN: z.coerce.number().int().min(1).max(1440).default(10),
+  /**
+   * Silence, in minutes, before the feed is treated as broken.
+   *
+   * This is the most important number here. Fomo is an undocumented private
+   * API: when they rename a field or drop a topic we do not get an error, we
+   * get nothing at all. A feed that quietly died four hours ago is worse than
+   * no feed, so silence has to be loud.
+   */
+  FOMO_STALE_MIN: z.coerce.number().int().min(5).max(1440).default(60),
+  /**
+   * Where to send "the Fomo feed is down and reconnecting did not fix it".
+   *
+   * Falls back to TELEGRAM_CHAT_ID. Accepts a numeric chat id or an @channel
+   * name. This is deliberately a side-channel rather than a Discord post: the
+   * thing being reported is that the pipeline into Discord has stopped working.
+   */
+  FOMO_ALERT_TELEGRAM_CHAT: optionalString,
+  /** Ignore trades below this USD value. 0 posts everything. */
+  FOMO_MIN_USD: z.coerce.number().min(0).default(0),
+
   // --- Holdings page (owner-only dashboard tab) ---
   /**
    * The two wallets the Holdings page reads on-chain balances for directly -

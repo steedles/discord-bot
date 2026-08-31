@@ -1,4 +1,5 @@
 import { CALL_TRACKER } from './definitions/call-tracker.js'
+import { FOMO_WATCH } from './definitions/fomo-watch.js'
 import { COIN_TRACKER } from './definitions/coin-tracker.js'
 import { DIP_HUNTER } from './definitions/dip-hunter.js'
 import { LAUNCH_SCANNER } from './definitions/launch-scanner.js'
@@ -39,6 +40,7 @@ export const FEATURES: FeatureDescriptor[] = [
   LEVEL_BREAK,
   PVP_COINS,
   VAMP_WATCH,
+  FOMO_WATCH,
 ]
 
 /**

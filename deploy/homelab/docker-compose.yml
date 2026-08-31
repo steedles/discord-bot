@@ -120,6 +120,65 @@ services:
       retries: 10
       start_period: 30s
 
+  # Drives a real browser against fomo.family and forwards trading_activity to
+  # the bot. Separate container because Playwright's browsers are built against
+  # glibc and the bot image is node:alpine - and because a Chrome crash must not
+  # be able to take the bot with it.
+  fomo-sidecar:
+    build:
+      context: ./fomo-sidecar
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      bot:
+        condition: service_healthy
+    environment:
+      # MUST be an app route. https://fomo.family/ is a static marketing page:
+      # it opens no websocket, so a sidecar pointed there looks healthy and
+      # delivers nothing forever.
+      FOMO_APP_URL: ${FOMO_APP_URL:-https://fomo.family/token}
+      FOMO_PROFILE_PATH: /profile
+      FOMO_HEADLESS: 'true'
+      FOMO_BOT_URL: http://bot:${DASHBOARD_PORT:-4300}
+      FOMO_INGEST_SECRET: ${FOMO_INGEST_SECRET}
+      FOMO_HEARTBEAT_SEC: ${FOMO_HEARTBEAT_SEC:-60}
+      FOMO_IDLE_RELOAD_MIN: ${FOMO_IDLE_RELOAD_MIN:-30}
+    volumes:
+      - fomo-profile:/profile
+    # Chrome is memory-hungry and this box runs ~40 containers. A cap turns a
+    # browser leak into one restarted container instead of a squeezed host.
+    mem_limit: 1500m
+    shm_size: 512m
+
+  # One-time login desktop. NOT part of the steady-state stack: it is in the
+  # `login` compose profile, so ordinary `up -d` never starts it.
+  #
+  #   docker compose -p discord-bot stop fomo-sidecar
+  #   docker compose -p discord-bot --profile login up -d fomo-login
+  #   ... log in at the tunnel hostname ...
+  #   docker compose -p discord-bot --profile login down fomo-login
+  #   docker compose -p discord-bot start fomo-sidecar
+  #
+  # The stop/start matters: Chrome locks the profile directory, so the sidecar
+  # and this container can never hold it at the same time.
+  fomo-login:
+    profiles: ['login']
+    build:
+      context: ./fomo-login
+      dockerfile: Dockerfile
+    restart: 'no'
+    environment:
+      # Refuses to start without this. What is behind it is a browser holding a
+      # live Google session, so an unauthenticated one is not an option.
+      VNC_PASSWORD: ${FOMO_VNC_PASSWORD}
+      START_URL: ${FOMO_APP_URL:-https://fomo.family/token}
+    volumes:
+      - fomo-profile:/profile
+    # Deliberately no `ports:`. The only route in is the tunnel, which is the
+    # only place access control can be enforced.
+    mem_limit: 2g
+    shm_size: 512m
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -140,3 +199,8 @@ volumes:
   # Dated log files, pruned after 14 days by the app. Survives `up --build`,
   # which is the whole point: Docker's own logs do not.
   bot-logs:
+  # The Chrome profile holding the Fomo session. Written by fomo-login, read by
+  # fomo-sidecar. This is a CREDENTIAL - it is what a logged-in Fomo (and
+  # Google) session looks like on disk. Never bake it into an image, never copy
+  # it off the host, and remove it if the account is ever retired.
+  fomo-profile:

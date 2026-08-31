@@ -8,8 +8,10 @@ import { config, dashboardReadiness } from '../config.js'
 import { log } from '../logger.js'
 import { registerWebhookRoutes } from '../monitor/webhook.js'
 import type { VolumeMonitorWorker } from '../monitor/worker.js'
+import type { FomoWatchWorker } from '../workers/fomo-watch.js'
 import { setSessionCookie } from './auth.js'
 import { registerRoutes } from './routes.js'
+import { registerFomoRoutes } from '../integrations/fomo/routes.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -32,6 +34,12 @@ export interface DashboardOptions {
    * weaken the dashboard's own auth in any way.
    */
   volumeMonitor?: VolumeMonitorWorker
+  /**
+   * Mounts the Fomo sidecar's ingest endpoints, on the same reasoning as the
+   * Helius webhook above: the bot has one origin, and the sidecar has no
+   * dashboard session to authenticate with.
+   */
+  fomoWatch?: FomoWatchWorker
   /**
    * Development only. Registers a `/dev-login` route that hands out the given
    * pre-created session, so the dashboard can be viewed without a Discord app.
@@ -95,6 +103,10 @@ export class DashboardServer {
 
     if (this.options.volumeMonitor) {
       registerWebhookRoutes(app, this.options.volumeMonitor)
+    }
+
+    if (this.options.fomoWatch) {
+      registerFomoRoutes(app, this.options.fomoWatch)
     }
 
     const devSession = this.options.devLoginSessionId

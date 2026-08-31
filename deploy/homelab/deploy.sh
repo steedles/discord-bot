@@ -97,10 +97,18 @@ cloudflared tunnel route dns "$TUNNEL_NAME" "$SUBDOMAIN" 2>&1 | grep -viE 'alrea
 # --- 2. render the cloudflared ingress config -----------------
 RENDERED_CFG="$(mktemp)"
 trap 'rm -f "$RENDERED_CFG"' EXIT
+# Defaults to fomo-login.<zone> derived from SUBDOMAIN, so an existing
+# .env.homelab needs no new variable for the route to render correctly.
+FOMO_LOGIN_SUBDOMAIN="${FOMO_LOGIN_SUBDOMAIN:-fomo-login.${SUBDOMAIN#*.}}"
+
 sed -e "s/__TUNNEL_ID__/$TUNNEL_ID/g" \
     -e "s/__SUBDOMAIN__/$SUBDOMAIN/g" \
+    -e "s/__FOMO_LOGIN_SUBDOMAIN__/$FOMO_LOGIN_SUBDOMAIN/g" \
     -e "s/__DASHBOARD_PORT__/$DASHBOARD_PORT/g" \
     "$HERE/cloudflared/config.yml.template" > "$RENDERED_CFG"
+
+echo "==> Routing DNS $FOMO_LOGIN_SUBDOMAIN -> tunnel $TUNNEL_ID"
+cloudflared tunnel route dns "$TUNNEL_NAME" "$FOMO_LOGIN_SUBDOMAIN" 2>&1 | grep -viE 'already (exists|configured)' || true
 
 # --- 3. rsync the repo to the homelab -------------------------
 echo "==> Syncing repo to $REMOTE_DIR"

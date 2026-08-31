@@ -529,3 +529,30 @@ export interface TelegramWatch {
   coins: TrackedCoin[]
   updatedAt: Date
 }
+
+/**
+ * One Fomo activity event we have already handled.
+ *
+ * Exists solely to make posting idempotent. `eventId` is Fomo's own
+ * `payload.id`, and the unique index on it IS the dedup mechanism: an insert
+ * that throws duplicate-key is the "already seen" answer, with no read-then-write
+ * race between the two paths that can deliver the same event (a live frame and a
+ * replay after reconnect).
+ *
+ * Deliberately NOT keyed on `tradeId`: a thesis carries the tradeId of the trade
+ * it comments on, so two distinct events share one tradeId and keying on it
+ * would silently swallow every thesis attached to an already-posted trade.
+ */
+export interface FomoSeenEvent {
+  /** Fomo's payload.id. Unique. */
+  eventId: string
+  /** Fomo's payload.tradeId. Correlation only - not unique. */
+  tradeId?: string
+  kind: 'BUY' | 'SELL' | 'THESIS' | 'UNKNOWN'
+  traderHandle?: string
+  ticker?: string
+  /** Fomo's timestamp. */
+  createdAt: Date
+  /** Ours. Carries the TTL - these rows are worthless once they cannot recur. */
+  seenAt: Date
+}

@@ -18,6 +18,7 @@ import type {
   TrackedWallet,
   CustomBoard,
   TelegramWatch,
+  FomoSeenEvent,
   StoredCandle,
   CandlePool,
 } from './models.js'
@@ -43,6 +44,7 @@ export interface Collections {
   trackedWallets: Collection<TrackedWallet>
   customBoards: Collection<CustomBoard>
   telegramWatches: Collection<TelegramWatch>
+  fomoEvents: Collection<FomoSeenEvent>
   /** @deprecated Read only by the one-time migration off the old scanner config. */
   guilds: Collection<GuildConfig>
 }
@@ -74,6 +76,7 @@ export async function connectMongo(): Promise<Collections> {
     trackedWallets: db.collection<TrackedWallet>('tracked_wallets'),
     customBoards: db.collection<CustomBoard>('custom_boards'),
     telegramWatches: db.collection<TelegramWatch>('telegram_watches'),
+    fomoEvents: db.collection<FomoSeenEvent>('fomo_events'),
     guilds: db.collection<GuildConfig>('guilds'),
   }
 
@@ -104,6 +107,15 @@ async function ensureIndexes(c: Collections): Promise<void> {
 
     c.sessions.createIndex({ sessionId: 1 }, { unique: true }),
     c.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
+    // THE dedup mechanism for Fomo activity. Unique on Fomo's own event id, so a
+    // duplicate insert throws rather than needing a read-then-write that two
+    // delivery paths could race. Never on tradeId: a thesis shares the tradeId
+    // of the trade it comments on, so that key would swallow theses.
+    c.fomoEvents.createIndex({ eventId: 1 }, { unique: true }),
+    // A week is far longer than any window in which an event could recur; past
+    // that these rows only cost disk.
+    c.fomoEvents.createIndex({ seenAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 7 }),
 
     c.guilds.createIndex({ guildId: 1 }, { unique: true }),
 

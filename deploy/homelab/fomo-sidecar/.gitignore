@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# The Chrome profile holds a live Fomo session. It is a credential.
+profile/

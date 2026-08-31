@@ -9,6 +9,7 @@ import { CoinTrackerWorker } from './workers/coin-tracker.js'
 import { LaunchScannerWorker } from './workers/launch-scanner.js'
 import { PriceAlertWorker } from './workers/price-alerts.js'
 import { CallTrackerWorker } from './workers/call-tracker.js'
+import { FomoWatchWorker } from './workers/fomo-watch.js'
 import { TokenBriefWorker } from './workers/token-brief.js'
 
 async function main(): Promise<void> {
@@ -27,9 +28,12 @@ async function main(): Promise<void> {
   // below does the following up, since it is already polling that watchlist.
   const callTracker = new CallTrackerWorker(client)
   const volumeMonitor = new VolumeMonitorWorker(client)
+  // Fed by the fomo-sidecar container over HTTP rather than by a timer, so it
+  // is handed to the dashboard, which carries its ingest route.
+  const fomoWatch = new FomoWatchWorker(client)
   // The dashboard also carries the Helius webhook route, so the monitor is
   // handed to it - Solana whale alerts arrive over HTTP, not over the gateway.
-  const dashboard = new DashboardServer(client, { volumeMonitor })
+  const dashboard = new DashboardServer(client, { volumeMonitor, fomoWatch })
 
   let shuttingDown = false
   const shutdown = async (signal: string): Promise<void> => {
@@ -43,6 +47,7 @@ async function main(): Promise<void> {
     coinTracker.stop()
     callTracker.stop()
     volumeMonitor.stop()
+    fomoWatch.stop()
     await dashboard.stop()
     await client.destroy()
     await closeMongo()
@@ -61,6 +66,7 @@ async function main(): Promise<void> {
   coinTracker.start()
   callTracker.start()
   volumeMonitor.start()
+  fomoWatch.start()
 
   // Started last: it reads the guild cache, which is only populated once the
   // gateway connection is up.

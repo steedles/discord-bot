@@ -12,4 +12,25 @@ credentials-file: /etc/cloudflared/__TUNNEL_ID__.json
 ingress:
   - hostname: __SUBDOMAIN__
     service: http://bot:__DASHBOARD_PORT__
+
+  # One-time Fomo login desktop (noVNC), reachable from anywhere so the session
+  # can be renewed without being at a particular machine.
+  #
+  # ⚠ THIS HOSTNAME MUST BE BEHIND CLOUDFLARE ACCESS. What answers on it is a
+  # browser logged into a Google account and a Fomo account, running inside the
+  # homelab network. The VNC password in the container is the second lock, not
+  # the first - a password prompt on a public URL is a brute-force target, and
+  # Access means unauthenticated requests never reach this origin at all.
+  # Setup is in deploy/homelab/fomo-login/README.md.
+  #
+  # The container is normally NOT running (compose profile `login`), so this
+  # route answers 502 the rest of the time. That is the intended steady state.
+  - hostname: __FOMO_LOGIN_SUBDOMAIN__
+    service: http://fomo-login:6080
+    originRequest:
+      # noVNC is a websocket app; without this the page loads and the screen
+      # stays blank, which looks like a broken desktop rather than a config bug.
+      noTLSVerify: true
+      connectTimeout: 30s
+
   - service: http_status:404
