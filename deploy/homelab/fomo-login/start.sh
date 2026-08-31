@@ -59,6 +59,19 @@ echo "    open the noVNC page, log into Fomo, confirm the feed loads, then stop 
 # the session outlive it, because none of them are this process.
 set +e
 while true; do
+  # Chromium locks a profile by writing SingletonLock as a symlink naming the
+  # HOSTNAME that holds it. A container gets a new hostname every time it is
+  # recreated, so the lock left by the previous run always looks like it belongs
+  # to someone else, and Chromium exits rc=21 rather than starting - forever,
+  # once a supervisor is retrying it. Forty-four times, in the run that found it.
+  #
+  # Safe to clear here because this container is the only thing that ever opens
+  # this profile: the sidecar must be stopped while it runs (see README.md), and
+  # nothing else mounts the volume.
+  rm -f "${PROFILE_DIR}/SingletonLock" \
+        "${PROFILE_DIR}/SingletonCookie" \
+        "${PROFILE_DIR}/SingletonSocket"
+
   "$CHROME" \
     --user-data-dir="${PROFILE_DIR}" \
     --no-sandbox \
