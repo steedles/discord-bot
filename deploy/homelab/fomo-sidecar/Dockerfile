@@ -4,8 +4,10 @@
 # built against glibc and do not run on musl. That incompatibility is the whole
 # reason this is a separate container rather than a module inside the bot.
 #
-# Pin the image tag to the playwright-core version in package.json. A mismatch
-# between the library and the bundled browser fails at runtime, not at build.
+# Pin the image tag to the playwright-core version in package.json - and pin
+# that dependency EXACTLY, with no caret. A caret let npm install 1.62.1 against
+# this 1.49.0 image, and the mismatch surfaced as a crash-looping container
+# hunting for a browser binary that was never in the image.
 FROM mcr.microsoft.com/playwright:v1.49.0-jammy AS build
 WORKDIR /app
 
