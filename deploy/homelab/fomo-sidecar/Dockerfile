@@ -24,6 +24,23 @@ FROM mcr.microsoft.com/playwright:v1.49.0-jammy AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Xvfb, because Fomo's app does not boot in headless Chromium.
+#
+# Measured, not guessed: headless loads the marketing shell (25 characters of
+# body text, the landing-page <title>), completes the websocket challenge, then
+# subscribes to NOTHING and is dropped by the server - 41 reconnects in twenty
+# minutes and not one event. The same profile in a headed browser boots the app
+# and delivers thousands of frames.
+#
+# So the browser runs headed against a virtual display. `xvfb-run` is a few MB
+# and removes an entire class of "works on my machine, silently does nothing in
+# the container" failure.
+USER root
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb \
+    && rm -rf /var/lib/apt/lists/*
+USER pwuser
+
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
@@ -35,4 +52,5 @@ USER pwuser
 # No healthcheck on purpose. "Chrome is running" is not the question - the
 # question is whether events are arriving, which only the bot can judge, from
 # the heartbeats this process sends it.
-CMD ["node", "dist/index.js"]
+# -a picks a free display number; --server-args sizes it to match the viewport.
+CMD ["xvfb-run", "-a", "--server-args=-screen 0 1280x900x24", "node", "dist/index.js"]

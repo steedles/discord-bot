@@ -149,7 +149,8 @@ services:
       # delivers nothing forever.
       FOMO_APP_URL: ${FOMO_APP_URL:-https://fomo.family/token}
       FOMO_PROFILE_PATH: /profile
-      FOMO_HEADLESS: 'true'
+      # Headed under Xvfb - the app does not boot in headless Chromium.
+      FOMO_HEADLESS: 'false'
       FOMO_BOT_URL: http://bot:${DASHBOARD_PORT:-4300}
       FOMO_INGEST_SECRET: ${FOMO_INGEST_SECRET}
       FOMO_HEARTBEAT_SEC: ${FOMO_HEARTBEAT_SEC:-60}
