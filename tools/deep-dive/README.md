@@ -42,6 +42,17 @@ is more honest about its gaps than anything written in a hurry.
 | `lib/links.mjs` | Pulls a token's website and socials off DexScreener, then checks each one: resolves or not, final URL after redirects, page title, whether the page mentions the contract address. | `node tools/deep-dive/lib/links.mjs <chain> <address>` |
 | `lib/x-profile.mjs` | An X account without an API key: exists, display name, bio, and whether the handle was renamed. Optionally checks the bio mentions a ticker. Takes handles or URLs in any shape. | `node tools/deep-dive/lib/x-profile.mjs <handle-or-url> [...] [--expect TICKER]` |
 
+### Robinhood Chain Blockscout is behind Cloudflare
+
+Found 2026-09-03. `robinhoodchain.blockscout.com` answers scripted requests with
+Cloudflare's "Just a moment..." interstitial, so holder distribution and LP/NFT
+ownership are NOT reachable by curl or fetch on that chain. Same wall `CLAUDE.md`
+records for GMGN and Axiom.
+
+This blocks the single most valuable unanswered question in a small-cap dive -
+holder concentration. A browser session (the Playwright stack in
+`deploy/homelab/fomo-sidecar/`) would get past it if it is ever worth building.
+
 ### What X gives up without an API key
 
 Measured 2026-09-03, so that no future dive re-derives it:
