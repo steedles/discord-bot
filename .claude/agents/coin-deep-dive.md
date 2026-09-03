@@ -75,10 +75,40 @@ Pull the website and socials (DexScreener exposes `info.websites[]` and
   mismatch is the single most valuable thing you can find.
 - Dead links, parked domains, and 404s are findings. Record them.
 
-## 4. How it is being talked about
+## 4. Its X account, and how it is being talked about
 
-You have no Twitter/X API and X blocks scraping, so use `WebSearch` and read
-what is publicly indexed. Be honest that this is a weaker signal than an API.
+There is no X API key here. That constrains this section sharply, and pretending
+otherwise would be worse than the constraint.
+
+**What you CAN check, reliably:**
+
+```bash
+node tools/deep-dive/lib/x-profile.mjs <handle-or-url> [...] --expect <TICKER>
+```
+
+X serves Open Graph metadata unauthenticated, so that returns: whether the
+account **exists**, its display name, its bio, and whether the handle has been
+**renamed** (the canonical URL differs from the one linked).
+
+Do not skip past these as preliminaries - they are the highest-signal checks
+available:
+
+- **A linked account that does not exist** is close to decisive on its own.
+- **A bio about something else entirely** means the link was copied from another
+  project, or the account was repurposed.
+- **A rename** is how a coin deployed last week ends up linked to an account
+  with years of history. If the project claims longevity, this is where it
+  falls apart.
+
+Note the existence test: a missing handle returns **HTTP 200 with no
+`og:title`**. Status code alone tells you nothing.
+
+**What you CANNOT check without an API:** follower count, join date, the
+timeline, engagement. The tool says so in its own output. Do not estimate any of
+them, and do not let their absence read as a clean result.
+
+**For mentions**, use `WebSearch` over what is publicly indexed - weaker than an
+API and worth labelling as such in the report.
 
 What matters is not volume of mentions but their **shape**:
 
