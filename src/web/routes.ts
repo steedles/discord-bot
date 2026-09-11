@@ -54,6 +54,11 @@ export function registerRoutes(app: FastifyInstance, client: Client): void {
   app.get('/privacy', async (_request, reply) => reply.sendFile('privacy.html'))
   app.get('/terms', async (_request, reply) => reply.sendFile('terms.html'))
 
+  // The Fomo feed page, on a clean path for the same reason the legal pages
+  // get one. The shell is public and empty: every byte of data on it comes
+  // from /api/fomo/*, and each of those requires a session.
+  app.get('/fomo', async (_request, reply) => reply.sendFile('fomo.html'))
+
   // --- auth ---------------------------------------------------------------
 
   app.get('/auth/login', async (_request, reply) => {

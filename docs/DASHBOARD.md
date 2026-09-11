@@ -173,6 +173,13 @@ All routes are same-origin and cookie-authenticated. Guild-scoped routes return
 | `DELETE` | `/api/guilds/:id/instances/:instanceId` | Remove a row |
 | `GET` | `/api/guilds/:id/stats` | Alert and launch counters |
 | `GET` | `/api/health` | Liveness; no auth required |
+| `GET` | `/fomo` | The Fomo feed page (see below) |
+| `GET` | `/api/fomo/alerts` | Kept alerts, newest first. `kind`, `trader`, `ticker`, `limit` |
+| `GET` | `/api/fomo/trades` | Trades taken on alerts, plus per-mode totals |
+| `GET` | `/api/fomo/stream` | SSE. Live alerts and trades as they land |
+| `GET` | `/api/fomo/health` | Sidecar feed state; no auth required |
+| `POST` | `/api/fomo/events` | Sidecar ingest. **Shared secret**, not a session |
+| `POST` | `/api/fomo/trades` | Report a trade taken on an alert. **Shared secret** |
 
 ### `PUT /api/guilds/:id/instances`
 
@@ -192,6 +199,78 @@ nothing.
 
 ---
 
+## The Fomo feed page
+
+`/fomo` shows what the `fomo-sidecar` is delivering - buys, sells and theses -
+as it arrives, and what has been traded on the back of it.
+
+**Why it stores anything at all.** `fomo_events` already existed and looks like
+a history, but it is a dedup ledger: six fields, a seven-day TTL, and no USD
+amount, market cap or thesis text. The normaliser was building a rich event,
+posting it to Discord and dropping it. `fomo_alerts` keeps that event -
+ninety days, every parsed field - and `FomoSeenEvent` stays exactly what it
+was. Two collections because they answer two questions: "have I posted this"
+and "what happened last week".
+
+**`raw` is kept only for `UNKNOWN`.** On the homelab `/` is a 5400rpm disk
+already at the limit of its write IOPS, and a full payload per event buys
+nothing for a kind we parsed cleanly. An UNKNOWN means Fomo changed something,
+which is the one case worth the bytes.
+
+**Live is SSE, not a websocket.** The traffic is one-directional and rare - a
+handful of events an hour against the ~2000 frames a minute the sidecar filters
+out - and `EventSource` reconnects on its own, which a raw websocket does not.
+The page re-runs its backfill on every reconnect, so a drop leaves no hole.
+`X-Accel-Buffering: no` is not optional: the Cloudflare tunnel this bot sits
+behind buffers a proxied response by default, which turns a live stream into
+one that arrives all at once when it closes.
+
+**The subscriber cap is a leak guard.** Every subscriber is an open response
+holding a socket, and a page reconnecting in a loop - what a broken deploy looks
+like - would accumulate them until the process runs out of handles. The 51st
+connection is refused visibly and the page says "too many tabs", because
+refusing is a failure somebody can see and leaking is not.
+
+**Everything on the page is built with `textContent`, never `innerHTML`.** A
+thesis is arbitrary text written by a stranger on a site we do not control, and
+it arrives unescaped. Rendering it as markup would be stored XSS with extra
+steps.
+
+**Trades are grouped by execution mode and never summed across it.**
+`fresh-start` runs `dry_run`, `paper` and `live`, and a single P&L figure
+that adds a paper fill to a live one is exactly the kind of number that gets
+believed. The `mode` column exists so the dashboard can refuse to add them.
+
+### Nothing writes a trade yet
+
+`POST /api/fomo/trades` exists to be called rather than because something is
+calling it. T6 (`fresh-start`'s Fomo frontrunner) detects and records but has
+no executor - `services/fomo-frontrun/src/main.ts` emits "entry signal, no
+executor wired" - and this bot only posts to Discord. The trades panel is
+therefore empty by construction, and says so on the page rather than looking
+broken.
+
+The contract, for whatever executes first:
+
+```jsonc
+{
+  "tradeRef": "t6-0001",        // yours, unique. A retry with the same ref updates
+  "eventId": "<FomoAlert.eventId>",
+  "source": "fomo-frontrun",
+  "side": "BUY",
+  "mode": "paper",              // dry_run | paper | live
+  "status": "intent",           // intent | open | closed | failed
+  "ticker": "TENDIES",
+  "usdAmount": 50,
+  "pnlUsd": 12.4                // on close
+}
+```
+
+Upserts on `tradeRef`, so the natural lifecycle is three reports - intent,
+fill, close - against one row.
+
+---
+
 ## Frontend notes
 
 `src/web/public/` — three files, no bundler and no build step beyond copying
@@ -202,6 +281,9 @@ them into `dist/` (`scripts/copy-public.mjs`, wired into `pnpm build`).
 | `index.html` | Shell |
 | `styles.css` | All styling. Design tokens are the `:root` custom properties |
 | `app.js` | State, rendering, API calls |
+| `fomo.html` | The Fomo feed page |
+| `fomo.css` | Layout for that page only. Redefines no token, so a palette change carries |
+| `fomo.js` | Backfill, SSE, filtering |
 
 A bundler was deliberately not added. The dashboard is a handful of screens
 whose forms are data-driven, so a toolchain would add build complexity and a

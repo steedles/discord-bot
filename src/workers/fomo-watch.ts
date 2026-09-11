@@ -6,6 +6,7 @@ import { fomoThesisEmbed, fomoTradeEmbed } from '../discord/embeds.js'
 import { pingFor } from '../discord/mentions.js'
 import { FOMO_WATCH } from '../features/definitions/fomo-watch.js'
 import { defaultSettings, readSettings } from '../features/types.js'
+import { recordAlert } from '../integrations/fomo/alert-store.js'
 import { FomoHealth } from '../integrations/fomo/health.js'
 import { isStale, normaliseActivity } from '../integrations/fomo/normalise.js'
 import type { FomoActivityEvent } from '../integrations/fomo/types.js'
@@ -98,6 +99,14 @@ export class FomoWatchWorker {
       }
 
       accepted++
+
+      // The record, written before the post. Discord is the copy that scrolls
+      // away; this is the one the dashboard reads, and it must not depend on a
+      // Discord send having worked. `recordAlert` swallows its own failures for
+      // the same reason the dedup write does - a sick database is a reason to
+      // post anyway, not a reason to stop.
+      await recordAlert(event)
+
       // Not awaited as part of the loop's critical path - a slow Discord send
       // must not hold up the rest of the batch or the sidecar's request.
       void this.post(event).catch((err) => log.fomo.error({ err, eventId: event.eventId }, 'fomo post failed'))

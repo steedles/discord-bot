@@ -34,6 +34,12 @@ process.env.DISCORD_CLIENT_SECRET ||= 'preview-not-a-real-secret'
 process.env.DISCORD_CLIENT_ID ||= '000000000000000000'
 process.env.DISCORD_TOKEN ||= 'preview-not-a-real-token'
 process.env.SESSION_SECRET ||= 'preview-session-secret-not-for-production'
+// The Fomo routes only mount when the feature is on and a secret is set, so
+// the preview turns both on for itself. Nothing here reaches the real sidecar:
+// the worker is constructed for its routes, never started, and the database is
+// still the _preview one set above.
+process.env.FOMO_ENABLED ||= 'true'
+process.env.FOMO_INGEST_SECRET ||= 'preview-not-a-real-secret'
 
 const { Collection } = await import('discord.js')
 const { config } = await import('../config.js')
@@ -41,6 +47,7 @@ const { upsertInstance } = await import('../db/features.js')
 const { closeMongo, connectMongo, getCollections } = await import('../db/mongo.js')
 const { logger } = await import('../logger.js')
 const { DashboardServer } = await import('../web/server.js')
+const { FomoWatchWorker } = await import('../workers/fomo-watch.js')
 
 type AnyClient = ConstructorParameters<typeof DashboardServer>[0]
 
@@ -184,6 +191,54 @@ async function seed(): Promise<void> {
     })
   }
 
+  // So the Fomo page has a feed to render. Shapes match what the normaliser
+  // produces from a real payload - a buy, a sell, and a thesis carrying the
+  // author's position - plus one trade so the attribution panel is not empty.
+  const { fomoAlerts, fomoAlertTrades } = getCollections()
+  const FOMO_DEMO = [
+    { eventId: 'preview-1', kind: 'BUY' as const, traderHandle: 'frankdegods', ticker: 'TENDIES',
+      usdAmount: 2400, price: 0.00042, marketCap: 1_850_000, minutesAgo: 2 },
+    { eventId: 'preview-2', kind: 'THESIS' as const, traderHandle: 'unipcs', ticker: 'TENDIES',
+      thesis: 'Bought the retrace into the 1.8M band. Thin book above here and the dev wallet has not moved since launch, so this is a liquidity bet rather than a conviction one. Out if it loses 1.4M.',
+      minutesAgo: 6 },
+    { eventId: 'preview-3', kind: 'SELL' as const, traderHandle: 'orangie', ticker: 'WIF',
+      usdAmount: 8100, price: 1.87, marketCap: 1_870_000_000, minutesAgo: 21 },
+  ]
+  for (const demo of FOMO_DEMO) {
+    const at = new Date(Date.now() - demo.minutesAgo * 60_000)
+    await fomoAlerts.insertOne({
+      eventId: demo.eventId,
+      kind: demo.kind,
+      traderHandle: demo.traderHandle,
+      traderVerified: true,
+      chainId: 'solana',
+      ticker: demo.ticker,
+      usdAmount: demo.usdAmount,
+      price: demo.price,
+      marketCap: demo.marketCap,
+      thesis: demo.thesis,
+      position: demo.kind === 'THESIS' ? { usdValue: 12_400, percentageUnrealizedPnl: 18.3 } : undefined,
+      createdAt: at,
+      receivedAt: at,
+    })
+  }
+  await fomoAlertTrades.insertOne({
+    tradeRef: 'preview-trade-1',
+    eventId: 'preview-1',
+    source: 'preview',
+    side: 'BUY',
+    mode: 'paper',
+    status: 'closed',
+    chainId: 'solana',
+    ticker: 'TENDIES',
+    usdAmount: 50,
+    pnlUsd: 12.4,
+    pnlPct: 24.8,
+    openedAt: new Date(Date.now() - 2 * 60_000),
+    closedAt: new Date(),
+    updatedAt: new Date(),
+  })
+
   // So the Live Charts tab has something recent to show.
   for (const [i, token] of DEMO_TOKENS.entries()) {
     await watchedTokens.insertOne({
@@ -226,7 +281,10 @@ await sessions.insertOne({
   expiresAt: new Date(Date.now() + 86_400_000),
 })
 
-const server = new DashboardServer(stubClient(), { devLoginSessionId: sessionId })
+// Constructed, deliberately not started: `start()` only arms the health timer,
+// and the routes are what the preview needs.
+const fomoWatch = new FomoWatchWorker(stubClient())
+const server = new DashboardServer(stubClient(), { devLoginSessionId: sessionId, fomoWatch })
 
 if (!(await server.start())) {
   logger.error('dashboard did not start - check the DASHBOARD_* settings')

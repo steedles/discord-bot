@@ -1,0 +1,385 @@
+/*
+ * The Fomo feed page.
+ *
+ * Layout and page-specific pieces only - every colour, font and radius comes
+ * from the tokens in styles.css, which is loaded first. Nothing here redefines
+ * a token, so a change to the dashboard's palette carries to this page.
+ */
+
+.fomo-lights {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fomo-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+
+.fomo-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex: none;
+}
+
+.fomo-light[data-state='live'] .fomo-dot,
+.fomo-light[data-state='CONNECTED'] .fomo-dot {
+  background: var(--on);
+  box-shadow: 0 0 8px var(--on);
+}
+.fomo-light[data-state='connecting'] .fomo-dot,
+.fomo-light[data-state='DISCONNECTED'] .fomo-dot {
+  background: var(--warn);
+}
+.fomo-light[data-state='offline'] .fomo-dot,
+.fomo-light[data-state='AUTH_REQUIRED'] .fomo-dot {
+  background: var(--off);
+  box-shadow: 0 0 8px var(--off);
+}
+
+/* AUTH_REQUIRED is the one state a human has to act on: the Fomo session died
+   and no amount of waiting brings the feed back. Say so, loudly. */
+.fomo-light[data-state='AUTH_REQUIRED'] {
+  border-color: var(--off);
+  color: var(--off);
+}
+
+.fomo-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.fomo-stats .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.fomo-stats .stat strong {
+  font-family: var(--mono);
+  font-size: 19px;
+  color: var(--text-hi);
+  font-variant-numeric: tabular-nums;
+}
+
+.fomo-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .fomo-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fomo-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.fomo-filters {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.fomo-tab {
+  padding: 6px 13px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.fomo-tab:hover {
+  color: var(--text-hi);
+}
+
+.fomo-tab.is-on {
+  background: var(--panel-hi);
+  color: var(--text-hi);
+}
+
+.fomo-toolbar input[type='text'] {
+  flex: 1;
+  min-width: 160px;
+}
+
+.fomo-feed,
+.fomo-trades {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fomo-row {
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  gap: 0 14px;
+  align-items: start;
+  padding: 12px 14px 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* The kind stripe. Colour is the fastest read on this page: green in, red out,
+   violet for somebody explaining themselves. */
+.fomo-row::before {
+  content: '';
+  grid-row: 1 / -1;
+  align-self: stretch;
+  background: var(--faint);
+}
+.fomo-row[data-kind='BUY']::before {
+  background: var(--on);
+}
+.fomo-row[data-kind='SELL']::before {
+  background: var(--off);
+}
+.fomo-row[data-kind='THESIS']::before {
+  background: var(--brand-1);
+}
+
+/* New arrivals flash once. Anything longer reads as an error state. */
+@keyframes fomo-land {
+  from {
+    background: var(--panel-hi);
+    border-color: var(--line-hi);
+  }
+  to {
+    background: var(--panel);
+    border-color: var(--line);
+  }
+}
+.fomo-row.is-new {
+  animation: fomo-land 1.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fomo-row.is-new {
+    animation: none;
+    border-color: var(--line-hi);
+  }
+}
+
+.fomo-body {
+  min-width: 0;
+}
+
+.fomo-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.fomo-kind {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel-hi);
+  color: var(--text-hi);
+}
+.fomo-row[data-kind='BUY'] .fomo-kind {
+  color: var(--on);
+}
+.fomo-row[data-kind='SELL'] .fomo-kind {
+  color: var(--off);
+}
+
+.fomo-trader {
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+.fomo-verified {
+  color: var(--brand-1);
+  font-size: 11px;
+}
+
+.fomo-ticker {
+  font-family: var(--mono);
+  color: var(--text-hi);
+}
+
+.fomo-meta {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fomo-thesis {
+  margin: 6px 0 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  /* A thesis can be long. Show a readable amount and let the row grow only so
+     far, rather than pushing every other alert off the screen. */
+  max-height: 7.8em;
+  overflow: hidden;
+  position: relative;
+}
+
+.fomo-thesis.is-open {
+  max-height: none;
+}
+
+.fomo-more {
+  font-size: 11px;
+  color: var(--brand-1);
+  background: none;
+  border: 0;
+  padding: 4px 0 0;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fomo-when {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* An alert that something actually traded on. Rare enough to be worth marking. */
+.fomo-traded {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line-hi);
+  color: var(--text-hi);
+}
+
+.fomo-side h2 {
+  margin: 0 0 10px;
+}
+
+.fomo-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.fomo-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fomo-mode {
+  font-family: var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.fomo-mode[data-mode='live'] {
+  color: var(--off);
+}
+.fomo-mode[data-mode='paper'] {
+  color: var(--warn);
+}
+.fomo-mode[data-mode='dry_run'] {
+  color: var(--muted);
+}
+
+.fomo-pnl[data-sign='up'] {
+  color: var(--on);
+}
+.fomo-pnl[data-sign='down'] {
+  color: var(--off);
+}
+
+.fomo-trade {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.fomo-trade-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 3px;
+}
+
+.fomo-status {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fomo-empty {
+  padding: 14px 2px;
+}
+
+.fomo-error {
+  padding: 10px 13px;
+  border: 1px solid var(--off);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--off);
+  font-size: 12px;
+  margin-bottom: 12px;
+}

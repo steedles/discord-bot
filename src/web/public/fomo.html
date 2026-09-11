@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Kanto Control Room · Fomo Feed</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/fomo.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>%E2%97%A2</text></svg>"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand"><span class="tick">◢</span> Fomo <span class="ver">feed</span></div>
+        <div class="spacer"></div>
+        <!-- Two different questions, so two different lights: is this page
+             attached, and is the sidecar's socket to Fomo actually up. A page
+             can be perfectly connected to a bot that is deaf. -->
+        <div class="fomo-lights">
+          <span class="fomo-light" id="stream-light" data-state="connecting">
+            <span class="fomo-dot"></span><span id="stream-label">connecting</span>
+          </span>
+          <span class="fomo-light" id="feed-light" data-state="unknown">
+            <span class="fomo-dot"></span><span id="feed-label">feed …</span>
+          </span>
+        </div>
+        <a class="btn btn-sm" href="/">Features</a>
+      </header>
+
+      <section class="fomo-stats" id="stats" aria-label="Totals">
+        <div class="stat">
+          <span class="eyebrow">Buys</span>
+          <strong id="stat-buy">–</strong>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Sells</span>
+          <strong id="stat-sell">–</strong>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Theses</span>
+          <strong id="stat-thesis">–</strong>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Alert volume</span>
+          <strong id="stat-usd">–</strong>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Last alert</span>
+          <strong id="stat-last">–</strong>
+        </div>
+      </section>
+
+      <div class="fomo-cols">
+        <main class="fomo-main">
+          <div class="fomo-toolbar">
+            <div class="fomo-filters" role="tablist" aria-label="Filter alerts">
+              <button class="fomo-tab is-on" data-kind="" role="tab" aria-selected="true">All</button>
+              <button class="fomo-tab" data-kind="BUY" role="tab" aria-selected="false">Buys</button>
+              <button class="fomo-tab" data-kind="SELL" role="tab" aria-selected="false">Sells</button>
+              <button class="fomo-tab" data-kind="THESIS" role="tab" aria-selected="false">Theses</button>
+            </div>
+            <input
+              type="text"
+              id="filter-text"
+              placeholder="trader or ticker…"
+              aria-label="Filter by trader or ticker"
+              autocomplete="off"
+            />
+          </div>
+
+          <ol class="fomo-feed" id="feed" aria-live="polite" aria-label="Fomo alerts"></ol>
+          <p class="hint fomo-empty" id="feed-empty" hidden>
+            No alerts yet. The feed is quiet rather than broken - Fomo delivers a handful of
+            events an hour, and anything that arrives will appear here without a refresh.
+          </p>
+        </main>
+
+        <aside class="fomo-side" aria-label="Trades taken on alerts">
+          <h2 class="eyebrow">Trades taken</h2>
+          <div id="trade-summary" class="fomo-summary"></div>
+          <ol class="fomo-trades" id="trades"></ol>
+          <p class="hint fomo-empty" id="trades-empty">
+            Nothing has traded on these alerts yet — and that is the true state of the system,
+            not a loading failure. The frontrunner detects and records but has no executor
+            wired, and this bot only posts to Discord. When something does trade, it reports
+            to <code>POST /api/fomo/trades</code> and lands here.
+          </p>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="/fomo.js"></script>
+  </body>
+</html>

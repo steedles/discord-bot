@@ -19,6 +19,8 @@ import type {
   CustomBoard,
   TelegramWatch,
   FomoSeenEvent,
+  FomoAlert,
+  FomoAlertTrade,
   StoredCandle,
   CandlePool,
 } from './models.js'
@@ -45,6 +47,9 @@ export interface Collections {
   customBoards: Collection<CustomBoard>
   telegramWatches: Collection<TelegramWatch>
   fomoEvents: Collection<FomoSeenEvent>
+  /** The kept record, as against the dedup ledger above. */
+  fomoAlerts: Collection<FomoAlert>
+  fomoAlertTrades: Collection<FomoAlertTrade>
   /** @deprecated Read only by the one-time migration off the old scanner config. */
   guilds: Collection<GuildConfig>
 }
@@ -77,6 +82,8 @@ export async function connectMongo(): Promise<Collections> {
     customBoards: db.collection<CustomBoard>('custom_boards'),
     telegramWatches: db.collection<TelegramWatch>('telegram_watches'),
     fomoEvents: db.collection<FomoSeenEvent>('fomo_events'),
+    fomoAlerts: db.collection<FomoAlert>('fomo_alerts'),
+    fomoAlertTrades: db.collection<FomoAlertTrade>('fomo_alert_trades'),
     guilds: db.collection<GuildConfig>('guilds'),
   }
 
@@ -116,6 +123,24 @@ async function ensureIndexes(c: Collections): Promise<void> {
     // A week is far longer than any window in which an event could recur; past
     // that these rows only cost disk.
     c.fomoEvents.createIndex({ seenAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 7 }),
+
+    // The kept alerts. Same unique key as the dedup ledger above and for the
+    // same reason, but a far longer life - this one exists to be read.
+    c.fomoAlerts.createIndex({ eventId: 1 }, { unique: true }),
+    // Ninety days, not seven: long enough to judge a trader over a run of
+    // calls, bounded because the disk under this box is the real constraint.
+    c.fomoAlerts.createIndex({ receivedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 }),
+    // The three ways the dashboard slices: newest first, by kind, by trader.
+    c.fomoAlerts.createIndex({ receivedAt: -1 }),
+    c.fomoAlerts.createIndex({ kind: 1, receivedAt: -1 }),
+    c.fomoAlerts.createIndex({ traderHandle: 1, receivedAt: -1 }),
+
+    // Trades carry no TTL. An alert is news and ages out; a trade is a record
+    // of money and does not.
+    c.fomoAlertTrades.createIndex({ tradeRef: 1 }, { unique: true }),
+    c.fomoAlertTrades.createIndex({ eventId: 1 }),
+    c.fomoAlertTrades.createIndex({ openedAt: -1 }),
+    c.fomoAlertTrades.createIndex({ status: 1, openedAt: -1 }),
 
     c.guilds.createIndex({ guildId: 1 }, { unique: true }),
 

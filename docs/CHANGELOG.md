@@ -5,6 +5,55 @@ strictly by date, because most of it landed together.
 
 ---
 
+## 2026-09-11 (The Fomo feed page, and a record that outlives the post)
+
+`/fomo` on the dashboard: buys, sells and theses as they land, and the trades
+taken on them. Live over SSE, so nothing needs refreshing.
+
+**The data was being thrown away.** `normaliseActivity` builds a rich event -
+USD amount, price, market cap, thesis text, the author's position - and the
+worker posted it to Discord and dropped it. The only thing that persisted was
+`fomo_events`, which looks like a history and is not: it is the dedup ledger,
+six fields, a seven-day TTL, no amounts and no thesis. So the first half of this
+change is `fomo_alerts`, which keeps the normalised event for ninety days.
+`FomoSeenEvent` is untouched - the two collections answer different questions
+("have I posted this" against "what happened last week") and merging them would
+have made the dedup key do a job it was explicitly designed not to do.
+
+The record is written **before** the Discord post and does not depend on it. A
+Discord outage should not cost us the history, and `recordAlert` swallows its
+own failures for the same reason the dedup write does: a sick database is a
+reason to post anyway, not a reason to stop.
+
+**`raw` is stored only for `UNKNOWN` events.** On the homelab `/` is a
+5400rpm disk already at its write ceiling - the Fomo sidecar alone wrote 83.6GB
+in 19 hours - and a full payload per event buys nothing for a kind we parsed.
+An UNKNOWN is Fomo having changed something, and that one is worth keeping.
+
+**SSE rather than a websocket**, because the traffic is one-directional and rare
+and `EventSource` reconnects by itself. The page backfills on every reconnect,
+so a dropped connection leaves no gap. Two things that are easy to get wrong and
+are commented at the call site: `X-Accel-Buffering: no`, without which the
+Cloudflare tunnel buffers the whole stream until it closes and the feed looks
+dead; and a hard cap of 50 subscribers, because each one is an open response and
+a tab reconnecting in a loop would otherwise exhaust the process's handles.
+
+**Trades are grouped by execution mode and never summed across it.** A paper
+fill and a live fill are not the same evidence, and one P&L number that adds
+them is the kind of number that gets believed - so `tradeSummary()` returns a
+row per mode and the page renders them apart.
+
+**Nothing writes a trade yet, and the page says so.** T6 in `fresh-start` has
+no executor and this bot does not trade, so `POST /api/fomo/trades` exists to
+be called rather than because anything calls it. The empty state explains that
+rather than looking like a failed fetch.
+
+New: `src/integrations/fomo/alert-store.ts`, `src/integrations/fomo/stream.ts`,
+`src/web/public/fomo.{html,css,js}`. Changed: `db/models.ts`, `db/mongo.ts`,
+`workers/fomo-watch.ts`, `integrations/fomo/routes.ts`, `web/routes.ts`.
+
+---
+
 ## 2026-08-25 ("My Alerts" picks from the shared watchlist first)
 
 Adding a coin to "My Alerts" was always a paste-a-CA form, same as My Charts. It now leads with a

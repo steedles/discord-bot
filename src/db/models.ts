@@ -556,3 +556,120 @@ export interface FomoSeenEvent {
   /** Ours. Carries the TTL - these rows are worthless once they cannot recur. */
   seenAt: Date
 }
+
+/**
+ * One Fomo alert, kept.
+ *
+ * Distinct from `FomoSeenEvent` above, which is a dedup ledger: six fields, a
+ * seven-day TTL, and deliberately nothing anybody would want to read later.
+ * This is the record - every normalised field, so the dashboard can show what
+ * an alert actually said long after Discord has scrolled past it.
+ *
+ * `raw` is kept for `UNKNOWN` only. On the homelab `/` is a 5400rpm disk that
+ * is already the binding constraint on that box, and a full payload per event
+ * buys nothing for the three kinds we parse - but an UNKNOWN means Fomo changed
+ * something, and that one is worth the bytes.
+ */
+export interface FomoAlert {
+  _id?: ObjectId
+  /** Fomo's `payload.id`. Unique, and the same key `FomoSeenEvent` dedups on. */
+  eventId: string
+  /** Correlates a thesis with the trade it comments on. Not unique. */
+  tradeId?: string
+  kind: 'BUY' | 'SELL' | 'THESIS' | 'UNKNOWN'
+
+  traderId?: string
+  traderHandle?: string
+  traderName?: string
+  traderVerified: boolean
+
+  chainId?: string
+  networkId?: number
+  tokenAddress?: string
+  ticker?: string
+
+  /** Present on BUY/SELL. Fomo sends no token amount and no transaction hash. */
+  usdAmount?: number
+  price?: number
+  marketCap?: number
+  fdv?: number
+
+  /** Present on THESIS. */
+  thesis?: string
+  position?: FomoAlertPosition
+
+  /** Fomo's clock. */
+  createdAt: Date
+  /** Ours, when the sidecar handed it over. Carries the TTL. */
+  receivedAt: Date
+
+  /** UNKNOWN only - see the note above. */
+  raw?: unknown
+}
+
+/** The author's position at the time of a thesis, as Fomo reported it. */
+export interface FomoAlertPosition {
+  humanTokenAmount?: number
+  usdValue?: number
+  unrealizedPnlUsd?: number
+  realizedPnlUsd?: number
+  percentageUnrealizedPnl?: number
+  percentageRealizedPnl?: number
+  closedAt?: string | null
+}
+
+/**
+ * A trade made because of an alert.
+ *
+ * **Nothing writes one of these yet**, and that is the honest state of the
+ * system rather than an oversight: T6 in `fresh-start` detects and records but
+ * has no executor (`services/fomo-frontrun/src/main.ts` - "entry signal, no
+ * executor wired"), and this bot only posts to Discord. The collection and the
+ * reporting route exist so that whatever grows an executor first has somewhere
+ * to report to, and so the dashboard's attribution panel is wired rather than
+ * invented later.
+ *
+ * `mode` is not decoration. `fresh-start` runs three execution modes and a
+ * paper fill must never be countable alongside a live one - the whole point of
+ * the column is that the dashboard can refuse to add them together.
+ */
+export interface FomoAlertTrade {
+  _id?: ObjectId
+  /**
+   * The reporter's own id for this trade. Unique, so a retry is idempotent.
+   *
+   * Ours rather than an exchange's: a trade can be reported at intent, before
+   * any venue has given it an id, and it must still be the same row when the
+   * fill arrives.
+   */
+  tradeRef: string
+  /** The alert this trade was taken on. Joins to `FomoAlert.eventId`. */
+  eventId: string
+  /** Which system took it - `fomo-frontrun`, `manual`, whatever comes next. */
+  source: string
+
+  side: 'BUY' | 'SELL'
+  /** Never mix these in a total. See the note above. */
+  mode: 'dry_run' | 'paper' | 'live'
+  status: 'intent' | 'open' | 'closed' | 'failed'
+
+  chainId?: string
+  tokenAddress?: string
+  ticker?: string
+
+  usdAmount?: number
+  price?: number
+  quantity?: number
+
+  /** Set when status becomes `closed`. */
+  pnlUsd?: number
+  pnlPct?: number
+
+  txHash?: string
+  /** Why a `failed` failed, or anything the reporter wants on the row. */
+  note?: string
+
+  openedAt: Date
+  closedAt?: Date
+  updatedAt: Date
+}
