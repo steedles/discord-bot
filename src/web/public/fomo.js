@@ -72,6 +72,37 @@ function el(tag, className, text) {
 
 // --- rendering -----------------------------------------------------------
 
+/**
+ * The ticker, as a link to Fomo where one can be built.
+ *
+ * Fomo covers every chain these alerts arrive on, so this is almost always a
+ * link - but a chain its slug map does not know produces plain text rather than
+ * a guessed URL, because a 404 in front of someone about to trade is worse than
+ * no link at all. The server decides; this only renders what it was given.
+ */
+function tickerNode(alert) {
+  const label = `$${alert.ticker}`
+  if (!alert.fomoUrl) return el('span', 'fomo-ticker', label)
+
+  const a = el('a', 'fomo-ticker fomo-link', label)
+  a.href = alert.fomoUrl
+  a.target = '_blank'
+  // noopener: the opened page must not get a handle on this one via window.opener.
+  a.rel = 'noopener noreferrer'
+  a.title = `Open ${alert.ticker} on Fomo`
+  return a
+}
+
+/** A named venue link beside the ticker. Only ever built from a server-supplied URL. */
+function venueLink(label, url) {
+  const a = el('a', 'fomo-venue', label)
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  a.title = `Open on ${label}`
+  return a
+}
+
 function matchesFilter(alert) {
   if (activeKind && alert.kind !== activeKind) return false
   if (!activeText) return true
@@ -99,7 +130,8 @@ function alertRow(alert, isNew) {
     tick.title = 'Verified on Fomo'
     head.append(tick)
   }
-  if (alert.ticker) head.append(el('span', 'fomo-ticker', `$${alert.ticker}`))
+  if (alert.ticker) head.append(tickerNode(alert))
+  if (alert.axiomUrl) head.append(venueLink('Axiom', alert.axiomUrl))
 
   const tradeCount = tradesByEvent.get(alert.eventId) ?? 0
   if (tradeCount > 0) {
@@ -342,6 +374,22 @@ function onLiveTrade(trade) {
   void refreshSummary()
 }
 
+/**
+ * An Axiom link that resolved after its alert was already on screen.
+ *
+ * Added in place rather than by re-rendering the row: re-rendering would restart
+ * the arrival flash on an alert that is no longer new, which reads as a second
+ * event.
+ */
+function onLiveLinks(event) {
+  const alert = alerts.find((a) => a.eventId === event.eventId)
+  if (alert) alert.axiomUrl = event.axiomUrl
+
+  const row = feedEl.querySelector(`[data-event-id="${CSS.escape(event.eventId)}"]`)
+  if (!row || row.querySelector('.fomo-venue')) return
+  row.querySelector('.fomo-head')?.append(venueLink('Axiom', event.axiomUrl))
+}
+
 async function refreshSummary() {
   try {
     const data = await getJson('/api/fomo/trades?limit=1')
@@ -369,6 +417,7 @@ function connect() {
       const event = JSON.parse(message.data)
       if (event.type === 'alert') onLiveAlert(event.alert)
       else if (event.type === 'trade') onLiveTrade(event.trade)
+      else if (event.type === 'links') onLiveLinks(event)
     } catch {
       // One malformed frame is not a reason to drop the connection.
     }

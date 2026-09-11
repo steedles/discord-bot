@@ -19,6 +19,15 @@ import { log } from '../../logger.js'
 export type FomoStreamEvent =
   | { type: 'alert'; alert: FomoAlert }
   | { type: 'trade'; trade: FomoAlertTrade }
+  /**
+   * An Axiom link that arrived after its alert did.
+   *
+   * The pool behind it takes a DexScreener lookup, which must not sit in front
+   * of the Discord post - the whole value of this path is that it is fast. So
+   * the alert is delivered first and its link follows a moment later, and an
+   * open page upgrades the row in place rather than waiting or reloading.
+   */
+  | { type: 'links'; eventId: string; axiomUrl: string }
 
 type Listener = (event: FomoStreamEvent) => void
 

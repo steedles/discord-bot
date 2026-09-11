@@ -242,6 +242,40 @@
   color: var(--text-hi);
 }
 
+/* The ticker as a link. Underlined on hover only - a feed of permanently
+   underlined tickers reads as noise rather than as something to click. */
+a.fomo-link {
+  color: var(--text-hi);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--line-hi);
+}
+
+a.fomo-link:hover,
+a.fomo-link:focus-visible {
+  color: var(--brand-1);
+  border-bottom-color: var(--brand-1);
+}
+
+/* Axiom, and anything else that earns a place beside the ticker. Present only
+   when the server could build a real URL - never a placeholder. */
+.fomo-venue {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.fomo-venue:hover,
+.fomo-venue:focus-visible {
+  color: var(--text-hi);
+  border-color: var(--brand-1);
+}
+
 .fomo-meta {
   font-size: 12px;
   color: var(--muted);

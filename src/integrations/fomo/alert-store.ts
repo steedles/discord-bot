@@ -2,6 +2,9 @@ import type { Filter } from 'mongodb'
 import type { FomoAlert, FomoAlertTrade } from '../../db/models.js'
 import { getCollections } from '../../db/mongo.js'
 import { log } from '../../logger.js'
+import { getPairsForToken } from '../../market/dexscreener.js'
+import { fomoUrl } from '../../market/fomo.js'
+import { axiomUrl } from '../../market/trade-links.js'
 import { fomoStream } from './stream.js'
 import type { FomoActivityEvent } from './types.js'
 
@@ -92,8 +95,76 @@ export async function recordAlert(event: FomoActivityEvent): Promise<FomoAlert |
     return undefined
   }
 
-  fomoStream.publish({ type: 'alert', alert })
+  // With links, so a live row arrives ready to click rather than becoming
+  // clickable only after the next reload. Axiom follows separately when it
+  // resolves - see below.
+  fomoStream.publish({ type: 'alert', alert: withLinks(alert) })
+
+  // Deliberately not awaited. Resolving the pool is a DexScreener call against
+  // a shared rate limit, and putting it in front of the Discord post would slow
+  // down the one thing on this path that is supposed to be fast.
+  void resolveAxiomPool(alert)
+
   return alert
+}
+
+/**
+ * Find the PumpSwap pool behind a Solana alert, so an Axiom link can exist.
+ *
+ * Fomo sends a mint; Axiom's URL takes a pool. `market/trade-links.ts` refuses
+ * to build the link from anything else, and this is the lookup that gives it
+ * something it will accept. Anything that is not a Solana token on PumpSwap
+ * resolves to nothing and gets no Axiom link, which is the documented and
+ * intended outcome rather than a gap.
+ *
+ * Costs one DexScreener request per Solana alert - about one in eight of them,
+ * measured over the first 46 - and never repeats for an alert already resolved.
+ */
+async function resolveAxiomPool(alert: FomoAlert): Promise<void> {
+  if (alert.chainId !== 'solana' || !alert.tokenAddress) return
+
+  try {
+    const pairs = await getPairsForToken(alert.tokenAddress)
+    // The pool Axiom understands, not merely the deepest one: a Raydium or
+    // Meteora pool address is not something Axiom is known to accept.
+    const pool = pairs.find(
+      (p) => p.chainId === 'solana' && p.dexId?.toLowerCase() === 'pumpswap',
+    )
+    if (!pool) return
+
+    await getCollections().fomoAlerts.updateOne(
+      { eventId: alert.eventId },
+      { $set: { pairAddress: pool.pairAddress, dexId: pool.dexId } },
+    )
+
+    const url = axiomUrl('solana', pool.dexId, pool.pairAddress)
+    if (url) fomoStream.publish({ type: 'links', eventId: alert.eventId, axiomUrl: url })
+  } catch (err) {
+    // A missing link is a cosmetic loss. It must never cost the alert.
+    log.fomo.debug({ err, eventId: alert.eventId }, 'axiom pool lookup failed')
+  }
+}
+
+/** An alert as the dashboard sees it: the stored row plus its outbound links. */
+export type FomoAlertWithLinks = FomoAlert & {
+  fomoUrl?: string
+  axiomUrl?: string
+}
+
+/**
+ * Attach the venue links to a stored alert.
+ *
+ * Computed on read rather than stored, so the day a slug changes the fix is one
+ * file and not a backfill. Both builders are the audited ones in `market/` -
+ * this deliberately constructs no URL of its own, because the whole point of
+ * those modules is that every link was confirmed against the real venue.
+ */
+export function withLinks(alert: FomoAlert): FomoAlertWithLinks {
+  return {
+    ...alert,
+    fomoUrl: alert.chainId && alert.tokenAddress ? fomoUrl(alert.chainId, alert.tokenAddress) : undefined,
+    axiomUrl: alert.chainId ? axiomUrl(alert.chainId, alert.dexId, alert.pairAddress) : undefined,
+  }
 }
 
 export interface ListAlertsOptions {
@@ -107,7 +178,7 @@ export interface ListAlertsOptions {
 }
 
 /** Newest first, because that is the only order the dashboard reads them in. */
-export async function listAlerts(options: ListAlertsOptions = {}): Promise<FomoAlert[]> {
+export async function listAlerts(options: ListAlertsOptions = {}): Promise<FomoAlertWithLinks[]> {
   const filter: Filter<FomoAlert> = {}
   if (options.kind) filter.kind = options.kind
   if (options.traderHandle) filter.traderHandle = options.traderHandle
@@ -116,11 +187,13 @@ export async function listAlerts(options: ListAlertsOptions = {}): Promise<FomoA
 
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
 
-  return getCollections()
+  const rows = await getCollections()
     .fomoAlerts.find(filter, { projection: { raw: 0 } })
     .sort({ receivedAt: -1 })
     .limit(limit)
     .toArray()
+
+  return rows.map(withLinks)
 }
 
 /** What a reporter may set. `openedAt` is ours on first write and never moves. */

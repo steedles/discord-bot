@@ -603,6 +603,21 @@ export interface FomoAlert {
   /** Ours, when the sidecar handed it over. Carries the TTL. */
   receivedAt: Date
 
+  /**
+   * The token's pool, resolved after the fact - Solana only, and only so an
+   * Axiom link can be built.
+   *
+   * Fomo sends a mint and nothing else, but Axiom's URL takes a **pool**
+   * address, never a mint (`market/trade-links.ts` explains why at length). So
+   * the pool is looked up once, in the background, and kept here. Absent means
+   * either not resolved yet, not Solana, or no PumpSwap pool exists - and all
+   * three mean the same thing downstream: no Axiom link, rather than a guessed
+   * one in front of somebody about to trade.
+   */
+  pairAddress?: string
+  /** The pool's DEX, so `axiomUrl` can refuse anything that is not PumpSwap. */
+  dexId?: string
+
   /** UNKNOWN only - see the note above. */
   raw?: unknown
 }
