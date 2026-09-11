@@ -2,7 +2,7 @@ import type { Filter } from 'mongodb'
 import type { FomoAlert, FomoAlertTrade } from '../../db/models.js'
 import { getCollections } from '../../db/mongo.js'
 import { log } from '../../logger.js'
-import { getPairsForToken } from '../../market/dexscreener.js'
+import { lookupPairsForToken, type PairsLookup } from '../../market/dexscreener.js'
 import { fomoUrl } from '../../market/fomo.js'
 import { axiomUrl } from '../../market/trade-links.js'
 import { fomoStream } from './stream.js'
@@ -100,48 +100,147 @@ export async function recordAlert(event: FomoActivityEvent): Promise<FomoAlert |
   // resolves - see below.
   fomoStream.publish({ type: 'alert', alert: withLinks(alert) })
 
-  // Deliberately not awaited. Resolving the pool is a DexScreener call against
-  // a shared rate limit, and putting it in front of the Discord post would slow
-  // down the one thing on this path that is supposed to be fast.
-  void resolveAxiomPool(alert)
+  // Queued, not called. The pool lookup spends a DexScreener budget shared with
+  // the volume monitor, so it is paced well behind this path rather than fired
+  // per alert - and it returns immediately either way.
+  queueAxiomPool(alert)
 
   return alert
 }
 
 /**
- * Find the PumpSwap pool behind a Solana alert, so an Axiom link can exist.
+ * The PumpSwap pool behind a mint, once we have asked.
  *
- * Fomo sends a mint; Axiom's URL takes a pool. `market/trade-links.ts` refuses
- * to build the link from anything else, and this is the lookup that gives it
- * something it will accept. Anything that is not a Solana token on PumpSwap
- * resolves to nothing and gets no Axiom link, which is the documented and
- * intended outcome rather than a gap.
+ * Keyed by **mint, not alert**. The first version asked per alert, which meant
+ * one busy token cost a request every time it traded - STONK was looked up
+ * twice in fifty seconds. A mint's pool does not change between two alerts a
+ * minute apart, so asking twice buys nothing and spends a budget that is
+ * already at its ceiling.
  *
- * Costs one DexScreener request per Solana alert - about one in eight of them,
- * measured over the first 46 - and never repeats for an alert already resolved.
+ * `'none'` means asked and answered: this token has no PumpSwap pool. A lookup
+ * that *failed* is deliberately not recorded at all, so the next alert for that
+ * mint tries again. That distinction is the whole point - see `resolveQueue`.
  */
-async function resolveAxiomPool(alert: FomoAlert): Promise<void> {
+const poolCache = new Map<string, { pairAddress: string; dexId: string } | 'none'>()
+
+/**
+ * Mints waiting to be looked up, and the worker draining them.
+ *
+ * A queue rather than a call on the ingest path, because alerts arrive in
+ * bursts and DexScreener's budget is shared with the volume monitor - which is
+ * already spending most of it. Firing a request per alert as it lands produced
+ * a sustained 429 rate and resolved nothing at all. Draining slowly means a
+ * link appears a little late, which for a cosmetic link is free.
+ */
+const resolveQueue: string[] = []
+let draining = false
+
+/** Spacing between lookups. Deliberately generous: nothing here is urgent. */
+const RESOLVE_GAP_MS = 15_000
+
+/**
+ * Ask for a Solana alert's pool, eventually.
+ *
+ * Returns immediately. Nothing about the alert, the Discord post or the
+ * dashboard waits on this.
+ */
+function queueAxiomPool(alert: FomoAlert): void {
+  // Only Solana can ever produce an Axiom link, so nothing else is worth a
+  // request. This is the cheapest of the three fixes and the most effective:
+  // it removes about two thirds of the lookups outright.
   if (alert.chainId !== 'solana' || !alert.tokenAddress) return
 
+  const mint = alert.tokenAddress
+  const cached = poolCache.get(mint)
+
+  if (cached === 'none') return
+  if (cached) {
+    // Already known - no request needed, just make sure this alert carries it.
+    void applyPool(mint, cached).catch(() => {})
+    return
+  }
+
+  if (!resolveQueue.includes(mint)) resolveQueue.push(mint)
+  void drainResolveQueue()
+}
+
+/** What a lookup result should be recorded as. `'retry'` means: record nothing. */
+export type PoolOutcome = { pairAddress: string; dexId: string } | 'none' | 'retry'
+
+/**
+ * Turn a lookup into a decision, and keep "we did not ask" out of the answers.
+ *
+ * This is the whole bug the first version had, in one function. `'none'` is a
+ * fact about the token and is cached forever; `'retry'` is a fact about *us* -
+ * the request was refused, almost always a 429 against a shared budget - and
+ * must never be written down as if the token had been checked. Recording a rate
+ * limit as "no pool" is how an outage becomes a permanent wrong answer.
+ *
+ * Pure, so the distinction can be tested without a network or a database.
+ */
+export function poolFromLookup(result: PairsLookup): PoolOutcome {
+  if (!result.ok) return 'retry'
+
+  const pool = result.pairs.find((p) => p.chainId === 'solana' && p.dexId?.toLowerCase() === 'pumpswap')
+  if (!pool) return 'none'
+
+  return { pairAddress: pool.pairAddress, dexId: pool.dexId }
+}
+
+async function drainResolveQueue(): Promise<void> {
+  if (draining) return
+  draining = true
   try {
-    const pairs = await getPairsForToken(alert.tokenAddress)
-    // The pool Axiom understands, not merely the deepest one: a Raydium or
-    // Meteora pool address is not something Axiom is known to accept.
-    const pool = pairs.find(
-      (p) => p.chainId === 'solana' && p.dexId?.toLowerCase() === 'pumpswap',
-    )
-    if (!pool) return
+    while (resolveQueue.length > 0) {
+      const mint = resolveQueue.shift()
+      if (!mint || poolCache.has(mint)) continue
 
-    await getCollections().fomoAlerts.updateOne(
-      { eventId: alert.eventId },
-      { $set: { pairAddress: pool.pairAddress, dexId: pool.dexId } },
-    )
+      const outcome = poolFromLookup(await lookupPairsForToken(mint))
 
-    const url = axiomUrl('solana', pool.dexId, pool.pairAddress)
-    if (url) fomoStream.publish({ type: 'links', eventId: alert.eventId, axiomUrl: url })
-  } catch (err) {
-    // A missing link is a cosmetic loss. It must never cost the alert.
-    log.fomo.debug({ err, eventId: alert.eventId }, 'axiom pool lookup failed')
+      if (outcome === 'retry') {
+        log.fomo.debug({ mint }, 'axiom pool lookup did not complete - will try again')
+      } else if (outcome === 'none') {
+        poolCache.set(mint, 'none')
+      } else {
+        poolCache.set(mint, outcome)
+        await applyPool(mint, outcome).catch((err) =>
+          log.fomo.debug({ err, mint }, 'could not store the resolved pool'),
+        )
+      }
+
+      if (resolveQueue.length > 0) {
+        await new Promise((resolve) => setTimeout(resolve, RESOLVE_GAP_MS))
+      }
+    }
+  } finally {
+    draining = false
+  }
+}
+
+/**
+ * Attach a resolved pool to every stored alert for that mint.
+ *
+ * `updateMany`, because a token that traded five times has five alerts and all
+ * of them want the link - and because the lookup that earned it should not have
+ * to be repeated for each.
+ */
+async function applyPool(mint: string, pool: { pairAddress: string; dexId: string }): Promise<void> {
+  const url = axiomUrl('solana', pool.dexId, pool.pairAddress)
+  if (!url) return
+
+  const affected = await getCollections()
+    .fomoAlerts.find({ tokenAddress: mint, pairAddress: { $exists: false } }, { projection: { eventId: 1 } })
+    .toArray()
+
+  if (affected.length === 0) return
+
+  await getCollections().fomoAlerts.updateMany(
+    { tokenAddress: mint },
+    { $set: { pairAddress: pool.pairAddress, dexId: pool.dexId } },
+  )
+
+  for (const row of affected) {
+    fomoStream.publish({ type: 'links', eventId: row.eventId, axiomUrl: url })
   }
 }
 

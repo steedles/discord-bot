@@ -57,14 +57,38 @@ export interface TokenProfile {
  * enough to tell a real pool from a broken one.
  */
 export async function getPairsForToken(address: string): Promise<DexPair[]> {
+  const result = await lookupPairsForToken(address)
+  if (result.ok) return result.pairs
+  log.market.warn({ err: result.reason, address }, 'getPairsForToken failed')
+  return []
+}
+
+/**
+ * The same lookup, but saying whether it actually happened.
+ *
+ * `getPairsForToken` returns `[]` for both "this token has no pairs" and "the
+ * request never succeeded", which is fine for a caller that only wants to skip
+ * a token this cycle and disastrous for one recording a conclusion: a rate-
+ * limited lookup gets written down as a fact about the token. A 429 is routine
+ * here - the pairs budget is shared and usually at its ceiling - so any caller
+ * that persists a negative must be able to tell the two apart.
+ *
+ * Same request, same limiter, same filtering. The only difference is that the
+ * failure is handed back instead of being flattened into an empty list.
+ */
+export type PairsLookup = { ok: true; pairs: DexPair[] } | { ok: false; reason: string }
+
+export async function lookupPairsForToken(address: string): Promise<PairsLookup> {
   try {
     const data = await fetchJson<PairsResponse>(`${BASE}/latest/dex/tokens/${address}`, {
       limiter: dexPairsLimiter,
     })
-    return (data.pairs ?? []).filter((p) => p.baseToken.address.toLowerCase() === address.toLowerCase())
+    return {
+      ok: true,
+      pairs: (data.pairs ?? []).filter((p) => p.baseToken.address.toLowerCase() === address.toLowerCase()),
+    }
   } catch (err) {
-    log.market.warn({ err: String(err), address }, 'getPairsForToken failed')
-    return []
+    return { ok: false, reason: String(err) }
   }
 }
 
