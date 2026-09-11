@@ -159,7 +159,24 @@ services:
       - fomo-profile:/profile
     # Chrome is memory-hungry and this box runs ~40 containers. A cap turns a
     # browser leak into one restarted container instead of a squeezed host.
-    mem_limit: 1500m
+    #
+    # Raised 1500m -> 3g on 2026-09-09 while chasing a load of 12 on 8 cores.
+    # It did NOT help, and the reason is worth keeping: at 1500m the container
+    # sat at 96% of its cap, which looked like starvation, but given 3g it
+    # settled at the same 1.4 GiB and host I/O pressure did not improve. Memory
+    # was never the constraint.
+    #
+    # The real one: / is a 5400rpm laptop drive (Seagate ST1000LM035) carrying
+    # every container on this box, and 61 write IOPS - about 1 MB/s - already
+    # holds it at 75% utilised. This sidecar is the largest single writer on the
+    # host (83.6 GB in 19 hours), so it is the thing making everything else wait,
+    # but no memory limit fixes a saturated spindle. There is an unmounted
+    # 512 GB NVMe in the machine.
+    #
+    # 3g is harmless headroom on a 15 GB host; 1500m is the tighter leak guard
+    # the comment above describes. Either is defensible - the evidence says
+    # neither changes the load.
+    mem_limit: 3g
     shm_size: 512m
 
   # One-time login desktop. NOT part of the steady-state stack: it is in the
