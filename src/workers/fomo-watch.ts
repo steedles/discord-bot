@@ -1,4 +1,4 @@
-import type { Client } from 'discord.js'
+import type { Client, MessageCreateOptions } from 'discord.js'
 import { config } from '../config.js'
 import { getCollections } from '../db/mongo.js'
 import { listEnabledPushInstances } from '../db/features.js'
@@ -11,6 +11,32 @@ import { FomoHealth } from '../integrations/fomo/health.js'
 import { isStale, normaliseActivity } from '../integrations/fomo/normalise.js'
 import type { FomoActivityEvent } from '../integrations/fomo/types.js'
 import { log } from '../logger.js'
+
+/** Total attempts per message, first included. Three covers a DNS blip; ten would not help. */
+const FOMO_SEND_ATTEMPTS = 3
+/** Base delay between attempts, multiplied by the attempt number. */
+const FOMO_SEND_RETRY_MS = 1_000
+
+/**
+ * Is this failure worth another attempt?
+ *
+ * The distinction that matters: a Node system error carries a **string** code -
+ * `EAI_AGAIN`, `ECONNRESET`, `ETIMEDOUT` - and is a network hiccup that may well
+ * be gone in a second. Discord's own errors carry a numeric code and an HTTP
+ * status; a 4xx there means permissions or a bad payload, which will be just as
+ * broken on the next try, so retrying only adds rate-limit pressure for every
+ * other channel. 5xx is Discord's problem and may pass.
+ *
+ * Unknown shapes are treated as permanent. Retrying something we do not
+ * understand is how a single bad message becomes a loop.
+ */
+export function isTransientSendError(err: unknown): boolean {
+  const e = err as { code?: unknown; status?: unknown } | null
+  if (!e || typeof e !== 'object') return false
+  if (typeof e.code === 'string') return true
+  if (typeof e.status === 'number') return e.status >= 500
+  return false
+}
 
 /**
  * Turns raw Fomo payloads into Discord posts.
@@ -188,15 +214,50 @@ export class FomoWatchWorker {
 
       // Mentions are always listed explicitly, never left to Discord's parser -
       // the message can then only ping exactly who the settings name.
-      await channel
-        .send({
-          content: ping?.content || undefined,
-          allowedMentions: ping?.allowed ?? { users: [], roles: [] },
-          embeds: [embed],
-        })
-        .then(() => this.record(channelId, event))
-        .catch((err) => log.fomo.warn({ err, channelId }, 'fomo send failed'))
+      const sent = await this.sendWithRetry(channel, channelId, {
+        content: ping?.content || undefined,
+        allowedMentions: ping?.allowed ?? { users: [], roles: [] },
+        embeds: [embed],
+      })
+      if (sent) this.record(channelId, event)
     }
+  }
+
+  /**
+   * Send, and try again if the failure was the kind that passes.
+   *
+   * Measured: three alerts were lost outright between 2026-09-11 and 09-14 to
+   * `getaddrinfo EAI_AGAIN discord.com` - a DNS blip on the host, lasting
+   * seconds. There was no retry, so each one cost a message permanently. The
+   * alert itself survived in `fomo_alerts` (the record is written before this
+   * runs, deliberately), but the channel never saw it.
+   *
+   * **Only transient failures are retried.** A permission error is not going to
+   * resolve itself in two seconds, and hammering Discord over one would turn a
+   * misconfigured channel into rate-limit pressure on every other channel.
+   */
+  private async sendWithRetry(
+    channel: { send: (payload: MessageCreateOptions) => Promise<unknown> },
+    channelId: string,
+    payload: MessageCreateOptions,
+  ): Promise<boolean> {
+    for (let attempt = 1; attempt <= FOMO_SEND_ATTEMPTS; attempt++) {
+      try {
+        await channel.send(payload)
+        if (attempt > 1) log.fomo.info({ channelId, attempt }, 'fomo send succeeded on retry')
+        return true
+      } catch (err) {
+        const last = attempt === FOMO_SEND_ATTEMPTS
+        if (!isTransientSendError(err) || last) {
+          log.fomo.warn({ err, channelId, attempt }, 'fomo send failed')
+          return false
+        }
+        // Linear rather than exponential: the failures this covers last seconds,
+        // and an alert that arrives a minute late has already lost its point.
+        await new Promise((r) => setTimeout(r, FOMO_SEND_RETRY_MS * attempt))
+      }
+    }
+    return false
   }
 
   /**

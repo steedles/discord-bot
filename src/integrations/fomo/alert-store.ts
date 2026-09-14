@@ -281,7 +281,19 @@ export async function listAlerts(options: ListAlertsOptions = {}): Promise<FomoA
   const filter: Filter<FomoAlert> = {}
   if (options.kind) filter.kind = options.kind
   if (options.traderHandle) filter.traderHandle = options.traderHandle
-  if (options.ticker) filter.ticker = options.ticker.toUpperCase()
+  if (options.ticker) {
+    // Case-insensitive, because alerts store the ticker exactly as Fomo sends
+    // it and Fomo does not normalise. This filter used to uppercase the query
+    // against un-uppercased data, so `?ticker=tulip` matched nothing for a
+    // token stored as `Tulip` - and the live feed is full of them: Tulip and
+    // TULIP inside four minutes from the same trader, plus baton, fone,
+    // microduck, anon, basket. It went unnoticed because the page's own filter
+    // box is client-side and lowercases both sides; only the API was broken.
+    //
+    // Anchored and escaped so a ticker containing regex metacharacters is
+    // matched literally rather than interpreted.
+    filter.ticker = new RegExp(`^${options.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+  }
   if (options.since) filter.receivedAt = { $gt: options.since }
 
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
