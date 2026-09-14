@@ -38,6 +38,16 @@ class Sidecar {
   private eventsSeen = 0
   private backoffMs = config.reconnectMinMs
   private stopping = false
+  /** One reload at a time. See `reload` - overlapping them is how this wedged. */
+  private reloading = false
+  /**
+   * Recovery attempts since the last frame of any kind.
+   *
+   * Reset by a frame arriving, which is the only evidence that recovery
+   * actually worked - a `page.goto` that resolves proves the page loaded, not
+   * that the socket is delivering.
+   */
+  private recoveryAttempts = 0
 
   async start(): Promise<void> {
     log.info('fomo sidecar starting', {
@@ -115,6 +125,11 @@ class Sidecar {
 
       ws.on('framereceived', ({ payload }) => {
         this.lastFrameAt = new Date()
+        // Recovery worked. Deliberately reset here and not on a successful
+        // `page.goto`: the 2026-09-14 wedge had a socket reporting itself open
+        // and delivering nothing, so "the page loaded" proves far less than
+        // "a frame arrived".
+        this.recoveryAttempts = 0
         const text = typeof payload === 'string' ? payload : Buffer.from(payload).toString('utf8')
         this.onFrame(text)
       })
@@ -198,15 +213,70 @@ class Sidecar {
     }
   }
 
-  /** Reload with backoff. Cheaper than relaunching and fixes most socket drops. */
+  /**
+   * Reload with backoff. Cheaper than relaunching and fixes most socket drops.
+   *
+   * Guarded against overlapping itself, which is not a theoretical concern: it
+   * is half of the 2026-09-14 wedge. `supervise` runs every 30 seconds while a
+   * reload sleeps for up to five minutes, so the old code started a fresh
+   * reload every tick and stacked ten of them - each ending in its own
+   * `page.goto`, each queued behind the last, each timing out after 60 seconds.
+   * The log showed a navigation failing 30 seconds after a reload that had not
+   * finished waiting yet, which is the tell.
+   *
+   * One reload at a time. A `supervise` tick that finds one in flight leaves it
+   * alone rather than piling on.
+   */
   private async reload(reason: string): Promise<void> {
-    if (this.stopping) return
-    const wait = this.backoffMs
-    this.backoffMs = Math.min(this.backoffMs * 2, config.reconnectMaxMs)
-    log.info('reloading', { reason, waitMs: wait })
-    await new Promise((r) => setTimeout(r, wait))
-    if (this.stopping) return
-    await this.navigate()
+    if (this.stopping || this.reloading) return
+    this.reloading = true
+    try {
+      this.recoveryAttempts++
+      if (this.recoveryAttempts > config.maxRecoveryAttempts) {
+        await this.giveUp(reason)
+        return
+      }
+
+      const wait = this.backoffMs
+      this.backoffMs = Math.min(this.backoffMs * 2, config.reconnectMaxMs)
+      log.info('reloading', {
+        reason,
+        waitMs: wait,
+        attempt: this.recoveryAttempts,
+        of: config.maxRecoveryAttempts,
+      })
+      await new Promise((r) => setTimeout(r, wait))
+      if (this.stopping) return
+      await this.navigate()
+    } finally {
+      this.reloading = false
+    }
+  }
+
+  /**
+   * Recovery is exhausted: exit, and let the restart policy build a fresh browser.
+   *
+   * Deliberately a non-zero exit rather than another retry. Every move this
+   * process has left - reload, re-navigate - runs through the same wedged
+   * browser, and on 2026-09-14 none of them worked for six and a half hours
+   * while a container restart fixed it in seconds. Handing over to the
+   * supervisor is the honest escalation, and it is the one the page-crash
+   * handler already relies on.
+   *
+   * The forwarder is flushed first so anything queued still reaches the bot.
+   */
+  private async giveUp(reason: string): Promise<void> {
+    log.error('recovery exhausted - exiting so the restart policy can replace this container', {
+      reason,
+      attempts: this.recoveryAttempts,
+      quietMin: this.lastFrameAt ? Math.round((Date.now() - this.lastFrameAt.getTime()) / 60_000) : null,
+      wsOpen: this.wsOpen,
+      eventsSeen: this.eventsSeen,
+    })
+    this.stopping = true
+    await this.forwarder.flush().catch(() => {})
+    await this.ctx?.close().catch(() => {})
+    process.exit(1)
   }
 
   /**

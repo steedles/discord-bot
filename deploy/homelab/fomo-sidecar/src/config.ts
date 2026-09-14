@@ -59,6 +59,32 @@ export const config = {
 
   /** Reload the page if the socket has delivered nothing for this long. */
   idleReloadMin: num('FOMO_IDLE_RELOAD_MIN', 30),
+
+  /**
+   * How many recovery attempts to make before giving up and exiting.
+   *
+   * On 2026-09-14 this process spent **six and a half hours** wedged: the
+   * socket reported open, no frames arrived, and every `page.goto` timed out at
+   * 60s. It retried that same reload for 389 minutes and would have continued
+   * indefinitely, because reloading was the only move it had. A container
+   * restart fixed it in seconds.
+   *
+   * So past this count the process exits non-zero and lets `restart:
+   * unless-stopped` build a fresh browser - the same escalation the page-crash
+   * handler already documents ("a crashed context is not [recoverable], so let
+   * the container restart policy handle that rather than pretending
+   * otherwise").
+   *
+   * Five attempts is **3-8 minutes** of trying from a fresh backoff, and
+   * **25-30 minutes** once the backoff has climbed to its 5-minute ceiling -
+   * which is where a long wedge finds it. Either way it is bounded, where the
+   * old behaviour was not.
+   *
+   * Counted since the last frame of any kind, so an ordinary quiet market never
+   * approaches it: liveness is the ~2000 frames a minute of `prices` and
+   * `trending_tokens`, not the traders we follow.
+   */
+  maxRecoveryAttempts: num('FOMO_MAX_RECOVERY_ATTEMPTS', 5),
 } as const
 
 export const WS_HOST = 'prod-api.fomo.family'
