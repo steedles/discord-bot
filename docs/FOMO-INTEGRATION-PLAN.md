@@ -216,7 +216,37 @@ FOMO_INGEST_SECRET        required when enabled
 FOMO_MAX_EVENT_AGE_MIN    10
 FOMO_STALE_MIN            60
 FOMO_MIN_USD              0
+FOMO_WEBHOOK_URL          blank = mirror off. A CREDENTIAL - see below
+FOMO_WEBHOOK_NAME         'Fomo Alerts'
 ```
+
+### The webhook mirror
+
+Reaches a server the bot has **not** been invited to, which is otherwise
+impossible: a bot can post only to guilds it belongs to, and no permission can
+be granted remotely. A webhook inverts the direction - an admin in the
+destination creates it and hands over a URL, and whatever holds that URL can
+post without any membership at all.
+
+Follows the same rule as `telegram-alerts.ts` and `signal-intake.ts`: fired
+without awaiting, every failure caught and logged, short timeout, no retry. A
+dead webhook is a quiet log line, never a missing or delayed Discord post.
+
+It applies the bot-wide `FOMO_MIN_USD` floor and nothing else. Per-channel
+settings are deliberately not consulted - they belong to channels in guilds this
+bot is in, and the mirror's destination is neither. Theses are always mirrored,
+the same call the per-channel filter makes.
+
+Two things that are easy to get wrong, both commented at the call site:
+
+- **The URL is a credential.** Anyone holding it can post to that channel under
+  any name and avatar. It lives in `.env.homelab` beside `FOMO_INGEST_SECRET`,
+  is never committed, and is never logged - `describeTarget` logs the webhook
+  id without its token, so an operator can tell two webhooks apart without the
+  logs becoming a way to post.
+- **A redirect is a refusal**, not a destination - the same reasoning
+  `signal-intake.ts` documents. A 3xx from a webhook URL means the URL is wrong,
+  and following it could POST an alert somewhere unintended.
 
 Sidecar-side: `FOMO_PROFILE_PATH`, `FOMO_HEADLESS`, `FOMO_APP_URL`,
 `FOMO_RECONNECT_MIN_MS`, `FOMO_RECONNECT_MAX_MS`, `FOMO_BOT_URL`, `FOMO_INGEST_SECRET`.

@@ -236,6 +236,33 @@ const schema = z.object({
   FOMO_ALERT_TELEGRAM_CHAT: optionalString,
   /** Ignore trades below this USD value. 0 posts everything. */
   FOMO_MIN_USD: z.coerce.number().min(0).default(0),
+  /**
+   * Mirror Fomo alerts to a Discord webhook, bot-wide.
+   *
+   * The only way to reach a server the bot has not been invited to: a bot can
+   * post solely to guilds it belongs to, while a webhook is created by an admin
+   * in the destination and needs no membership at all.
+   *
+   * **This URL is a credential.** Anyone holding it can post to that channel
+   * under any name. It lives in `.env.homelab` beside FOMO_INGEST_SECRET, is
+   * never committed, and is never logged - see `describeTarget` in
+   * webhook-mirror.ts, which logs the webhook id without its token.
+   *
+   * Blank turns the mirror off, the same "blank is opt-out" rule every other
+   * optional integration here follows.
+   */
+  FOMO_WEBHOOK_URL: optionalString,
+  /**
+   * Display name on mirrored posts. The destination sees this, not our bot's name.
+   *
+   * Blank falls back rather than posting under an empty name - the same
+   * "absent or blank means not set" rule `optionalString` encodes, but with a
+   * default instead of undefined.
+   */
+  FOMO_WEBHOOK_NAME: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() !== '' ? v.trim() : 'Fomo Alerts')),
 
   // --- Holdings page (owner-only dashboard tab) ---
   /**

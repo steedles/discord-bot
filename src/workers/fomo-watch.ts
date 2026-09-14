@@ -7,6 +7,7 @@ import { pingFor } from '../discord/mentions.js'
 import { FOMO_WATCH } from '../features/definitions/fomo-watch.js'
 import { defaultSettings, readSettings } from '../features/types.js'
 import { recordAlert } from '../integrations/fomo/alert-store.js'
+import { fomoWebhookEnabled, mirrorToWebhook } from '../integrations/fomo/webhook-mirror.js'
 import { FomoHealth } from '../integrations/fomo/health.js'
 import { isStale, normaliseActivity } from '../integrations/fomo/normalise.js'
 import type { FomoActivityEvent } from '../integrations/fomo/types.js'
@@ -174,6 +175,18 @@ export class FomoWatchWorker {
 
   private async post(event: FomoActivityEvent): Promise<void> {
     const instances = await listEnabledPushInstances(FOMO_WATCH.id)
+
+    // The webhook mirror is independent of the channel loop below, and
+    // deliberately so: it reaches a server the bot is not in, so it must not
+    // depend on this bot having a channel configured anywhere. It applies the
+    // bot-wide size floor only - per-channel settings belong to channels.
+    if (fomoWebhookEnabled() && this.wantedByMirror(event)) {
+      const embed = event.kind === 'THESIS' ? fomoThesisEmbed(event) : fomoTradeEmbed(event)
+      // Not awaited, like every other side channel here. A slow or dead webhook
+      // must not delay the Discord posts that follow.
+      void mirrorToWebhook([embed])
+    }
+
     if (instances.length === 0) return
 
     for (const instance of instances) {
@@ -221,6 +234,21 @@ export class FomoWatchWorker {
       })
       if (sent) this.record(channelId, event)
     }
+  }
+
+  /**
+   * Does the mirror want this event?
+   *
+   * Only the bot-wide `FOMO_MIN_USD` floor, and only on trades - a thesis is
+   * worth reading whatever the position behind it was, which is the same call
+   * the per-channel filter makes. Per-channel settings are deliberately NOT
+   * consulted: they belong to specific channels in guilds this bot is in, and
+   * the mirror's destination is neither.
+   */
+  private wantedByMirror(event: FomoActivityEvent): boolean {
+    if (event.kind === 'UNKNOWN') return false
+    if (event.kind === 'THESIS') return true
+    return config.FOMO_MIN_USD <= 0 || (event.usdAmount ?? 0) >= config.FOMO_MIN_USD
   }
 
   /**
