@@ -264,6 +264,19 @@ const schema = z.object({
     .optional()
     .transform((v) => (v && v.trim() !== '' ? v.trim() : 'Fomo Alerts')),
 
+  // --- Ops runner (dashboard-triggered host jobs) ---
+  /**
+   * Shared secret the homelab's `ops-runner` presents when it polls for jobs
+   * queued from the dashboard's Setup tab - an env change, a container restart.
+   *
+   * The runner is the only thing that touches `.env.homelab` or Docker; the
+   * bot never gets a Docker socket. Without this secret the runner routes do
+   * not mount and the Setup tab says so - the same fail-closed rule the Helius
+   * webhook and the Fomo ingest follow. An open job queue would let anyone who
+   * found it restart the bot, or claim a job carrying an API key.
+   */
+  OPS_RUNNER_SECRET: optionalString,
+
   // --- Holdings page (owner-only dashboard tab) ---
   /**
    * The two wallets the Holdings page reads on-chain balances for directly -

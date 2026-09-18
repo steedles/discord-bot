@@ -1,0 +1,26 @@
+# systemd --user unit for the dashboard job runner. Installed by install.sh
+# into ~/.config/systemd/user/discord-bot-ops-runner.service.
+#
+# Runs as the same user that owns ~/discord-bot and the docker group
+# membership, which is exactly the access it needs and no more. Needs
+# `loginctl enable-linger` for that user so it runs without a login session -
+# install.sh checks.
+
+[Unit]
+Description=discord-bot ops runner (dashboard-queued env changes and restarts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/discord-bot/deploy/homelab/ops-runner/ops-runner.py
+WorkingDirectory=%h/discord-bot/deploy/homelab
+Restart=always
+RestartSec=5
+# journald gets stdout. The script never prints a value, only key names.
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

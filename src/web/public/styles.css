@@ -1878,3 +1878,216 @@ body.charts-mode .topbar {
 .holdings-grid .chart-card {
   height: 260px;
 }
+
+/* ---------- setup -------------------------------------------------------- */
+
+.setup-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-stats {
+  margin-bottom: 24px;
+}
+
+.setup-stat-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.setup-card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 18px 20px 16px;
+  margin-bottom: 20px;
+}
+
+.setup-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.setup-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-hi);
+}
+
+.setup-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px 18px;
+  margin-bottom: 14px;
+}
+
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.setup-label em {
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: var(--faint);
+  margin-left: 6px;
+}
+
+.setup-label .setup-set {
+  color: var(--on);
+}
+
+.setup-keys {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-bottom: 14px;
+}
+
+.setup-keys summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.setup-keys summary .hint {
+  margin-left: 8px;
+}
+
+.setup-key-group {
+  margin-bottom: 12px;
+}
+
+.setup-key-title {
+  font-size: 12px;
+  color: var(--text-hi);
+  margin-bottom: 8px;
+}
+
+.setup-key-title .hint {
+  margin-left: 8px;
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.setup-steps {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+.setup-steps li {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  align-items: baseline;
+}
+
+.setup-steps li.ok .setup-step-mark {
+  color: var(--on);
+}
+
+.setup-steps li.bad .setup-step-mark {
+  color: var(--off);
+}
+
+.setup-step-name {
+  color: var(--text-hi);
+  white-space: nowrap;
+}
+
+.setup-step-detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.setup-job {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-hi);
+  border-left: 2px solid var(--warn);
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+.setup-job.done {
+  border-left-color: var(--on);
+}
+
+.setup-job.failed,
+.setup-job.bad {
+  border-left-color: var(--off);
+}
+
+.setup-job-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--line-hi);
+  border-top-color: var(--on);
+  border-radius: 50%;
+  animation: setup-spin 0.9s linear infinite;
+}
+
+.setup-job.done .setup-job-spinner,
+.setup-job.failed .setup-job-spinner,
+.setup-job.bad .setup-job-spinner {
+  animation: none;
+  border-color: currentColor;
+}
+
+@keyframes setup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.setup-jobs {
+  margin-top: 18px;
+}
+
+.setup-jobs td {
+  white-space: normal;
+}
+
+.setup-job-done {
+  color: var(--on);
+}
+
+.setup-job-failed {
+  color: var(--off);
+}
+
+.setup-job-queued,
+.setup-job-claimed {
+  color: var(--warn);
+}

@@ -3,6 +3,7 @@ import { config } from '../config.js'
 import { log } from '../logger.js'
 import { commandMap } from './commands/index.js'
 import { errorEmbed } from './embeds.js'
+import { registerAllGuildCommands, registerGuildCommands } from './register-commands.js'
 
 /**
  * Guilds covers slash commands. GuildMessages + MessageContent are what let
@@ -27,6 +28,22 @@ export function createClient(): Client {
 
   client.once(Events.ClientReady, (c) => {
     log.bot.info({ user: c.user.tag, guilds: c.guilds.cache.size }, 'discord ready')
+    // Every guild, every boot: a bulk PUT of an unchanged set is a no-op for
+    // Discord, and it means a guild joined while the bot was down still gets
+    // its commands. See register-commands.ts for why per-guild, not global.
+    void registerAllGuildCommands(c)
+  })
+
+  // The invite itself is the one step only a server admin can do. Everything
+  // that follows it - the commands appearing - happens here, so an invite made
+  // at 3am with nobody at a workstation still produces a working bot.
+  client.on(Events.GuildCreate, (guild) => {
+    log.bot.info({ guildId: guild.id, name: guild.name, members: guild.memberCount }, 'joined guild')
+    void registerGuildCommands(guild.id)
+  })
+
+  client.on(Events.GuildDelete, (guild) => {
+    log.bot.info({ guildId: guild.id, name: guild.name }, 'left guild')
   })
 
   client.on(Events.InteractionCreate, (interaction) => {

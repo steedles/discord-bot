@@ -113,6 +113,10 @@ services:
       FOMO_MAX_EVENT_AGE_MIN: ${FOMO_MAX_EVENT_AGE_MIN:-10}
       FOMO_STALE_MIN: ${FOMO_STALE_MIN:-60}
       FOMO_MIN_USD: ${FOMO_MIN_USD:-0}
+      # Shared secret for deploy/homelab/ops-runner, the host-side service the
+      # dashboard's Setup tab queues env changes and restarts through. Blank
+      # means the runner endpoints never mount and the tab says so.
+      OPS_RUNNER_SECRET: ${OPS_RUNNER_SECRET:-}
       # Holdings page - reads these two wallets' on-chain balances directly.
       # Same blank-means-off rule as above.
       HOLDINGS_SOLANA_WALLET: ${HOLDINGS_SOLANA_WALLET:-}

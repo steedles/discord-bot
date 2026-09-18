@@ -415,6 +415,22 @@ bot is in. An empty
 `DASHBOARD_USERS` rejects every password attempt rather than admitting anyone,
 and passwords are stored as scrypt hashes, never plaintext.
 
+**The bot never touches the host; the host polls the bot.** The Setup tab's
+env changes and restarts go through `src/ops/` as *jobs* that
+`deploy/homelab/ops-runner/ops-runner.py` (a systemd `--user` service on the
+homelab) claims over loopback with `OPS_RUNNER_SECRET`. No Docker socket in any
+container, no SSH key on the bot, and nothing the web sends is ever executed -
+a job is one of two types whose arguments are checked against allowlists
+(`src/ops/env-keys.ts`, restated in the runner because the runner is the
+process with write access to the file holding `DISCORD_TOKEN`). Adding an env
+key means adding it in both places. The values in an `apply-env` job live in
+the bot's memory until claimed and in `.env.homelab` afterwards - never in
+Mongo (`ops_jobs` holds key names), never in a log line, never in a response.
+Slash commands are the other half of "nobody at a workstation": the bot
+registers them per guild on every boot and on `guildCreate`
+(`src/discord/register-commands.ts`), so never also register globally - Discord
+shows both sets.
+
 **Static dashboard assets need `scripts/copy-public.mjs`.** `tsc` only emits JS,
 so `pnpm build` copies `src/web/public/` into `dist/`. The Dockerfile must copy
 `scripts/` for this to work.

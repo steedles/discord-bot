@@ -688,3 +688,51 @@ export interface FomoAlertTrade {
   closedAt?: Date
   updatedAt: Date
 }
+
+// --- ops jobs -----------------------------------------------------------------
+
+export type OpsJobType = 'apply-env' | 'restart'
+export type OpsJobStatus = 'queued' | 'claimed' | 'done' | 'failed'
+
+export interface OpsJobStep {
+  name: string
+  ok: boolean
+  detail?: string
+}
+
+export interface OpsJobResult {
+  ok: boolean
+  summary: string
+  steps: OpsJobStep[]
+}
+
+/**
+ * A job the dashboard queued for the homelab's `ops-runner` - an env change or
+ * a container restart. The audit record, not the job itself.
+ *
+ * **Never holds a value.** An `apply-env` job carries API keys, and those live
+ * only in the bot's memory (`src/ops/jobs.ts`) until the runner claims them,
+ * after which the only copy is `.env.homelab` where they belong. This row keeps
+ * which keys were set, by whom, and how it went - enough to answer "who changed
+ * the Helius key and did the bot come back", never enough to read the key.
+ */
+export interface OpsJob {
+  _id?: ObjectId
+  /** Random id, what the runner reports against. */
+  jobId: string
+  type: OpsJobType
+  /** `apply-env` only: the names of the keys, never their values. */
+  envKeys?: string[]
+  /** `restart` only: which compose services. */
+  services?: string[]
+  /** The dashboard session that asked - a Discord user id or `local:<email>`. */
+  requestedBy: string
+  requestedByName: string
+  /** The server the Setup tab was on. Context only; jobs are bot-wide. */
+  guildId: string
+  status: OpsJobStatus
+  createdAt: Date
+  claimedAt?: Date
+  finishedAt?: Date
+  result?: OpsJobResult
+}

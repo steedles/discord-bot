@@ -16,7 +16,7 @@ const state = {
   stats: null,
   open: new Set(), // expanded rows, by scope key
   drafts: new Map(), // unsaved edits, by scope key
-  view: 'features', // 'features' | 'charts' | 'history' | 'watchlist' | 'wallets' | 'board' | 'alerts' | 'holdings'
+  view: 'features', // 'features' | 'charts' | 'history' | 'watchlist' | 'wallets' | 'board' | 'alerts' | 'setup' | 'holdings'
   chartCards: new Map(), // live-charts DOM cards, by `${chainId}:${pairAddress}`
   chartsTimer: null,
   lastCharts: [], // most recent poll's natural (unpinned) order, for instant re-pin without a fetch
@@ -42,6 +42,9 @@ const state = {
   // so they're offered first rather than requiring a re-typed contract address for something already watched.
   holdingsCards: new Map(), // holdings-grid DOM cards, same keying as chartCards
   holdingsTimer: null,
+  setup: null, // the Setup tab's status, as returned by /api/guilds/:id/setup
+  setupJob: null, // the job being watched after Connect / Restart, or null
+  setupPollTimer: null,
 }
 
 /** Columns in the "My Charts" grid - a slot's x/y/w/h are all in these cells. */
@@ -253,6 +256,7 @@ function render() {
   document.body.classList.remove('charts-mode')
   stopChartsPolling()
   stopHoldingsPolling()
+  stopSetupPolling()
 
   if (state.view === 'history') {
     app.innerHTML = `${topbar()}${historyShell()}`
@@ -286,6 +290,14 @@ function render() {
     return
   }
 
+  if (state.view === 'setup') {
+    app.innerHTML = `${topbar()}${setupShell()}`
+    wireTopbar()
+    wireSetup()
+    loadSetup()
+    return
+  }
+
   if (state.view === 'holdings' && isOwner()) {
     app.innerHTML = `${topbar()}${holdingsShell()}`
     wireTopbar()
@@ -315,6 +327,7 @@ function topbar() {
         <button class="viewtab${state.view === 'wallets' ? ' active' : ''}" data-view="wallets">Tracked Wallets</button>
         <button class="viewtab${state.view === 'board' ? ' active' : ''}" data-view="board">My Charts</button>
         <button class="viewtab${state.view === 'alerts' ? ' active' : ''}" data-view="alerts">My Alerts</button>
+        <button class="viewtab${state.view === 'setup' ? ' active' : ''}" data-view="setup">Setup</button>
         ${isOwner() ? `<button class="viewtab${state.view === 'holdings' ? ' active' : ''}" data-view="holdings">Holdings</button>` : ''}
       </nav>`
     : ''
@@ -1849,6 +1862,419 @@ function renderTrackedWalletsTable() {
     </table>`
 }
 
+// ----------------------------------------------------------------- setup
+
+/**
+ * "Setup" - the companion to the setup guide's "your part / my part" split.
+ *
+ * Everything the guide has Wayne doing after an invite happens from here:
+ * slash commands for this server, the trial channel's three features, the
+ * ping role, and the streaming keys. The first three are done by the bot in
+ * the request; the keys are queued for the homelab runner, which rewrites the
+ * env file and recreates the bot - so the page polls the job through the
+ * restart rather than waiting on a response the old process can never send.
+ *
+ * Values typed here are sent once and never shown again. The status card
+ * only ever says whether a key is set.
+ */
+const SETUP_JOB_POLL_MS = 3_000
+/** A job is given this long before the page stops watching it - an env apply is a container rebuild-free recreate plus a health wait, a couple of minutes at most. */
+const SETUP_JOB_TIMEOUT_MS = 8 * 60_000
+
+function setupShell() {
+  return `
+    <div class="setup-view">
+      <div class="charts-head">
+        <h2>Setup</h2>
+        <span class="hint">The steps from the setup guide that happen on this side. Safe to run more than once.</span>
+      </div>
+      <div id="setup-status"><div class="empty">Loading…</div></div>
+
+      <section class="setup-card">
+        <div class="setup-card-head">
+          <h3>Connect this server</h3>
+          <span class="hint">Registers the slash commands here, switches on the three command features in the trial channel, and sends any streaming keys to the homelab.</span>
+        </div>
+        <form id="setup-form" autocomplete="off">
+          <div class="setup-fields">
+            <label class="setup-field">
+              <span class="setup-label">Trial channel</span>
+              <select class="board-chain-select" name="channelId" id="setup-channel"></select>
+              <span class="hint">Market Lookup, Price Alerts and Coin Tracker are switched on here. Leave blank to only register commands.</span>
+            </label>
+            <label class="setup-field">
+              <span class="setup-label">Ping role <em>optional</em></span>
+              <select class="board-chain-select" name="roleId" id="setup-role"></select>
+              <span class="hint">Applied to Price Alerts, and to any alert feature already on in that channel.</span>
+            </label>
+          </div>
+
+          <details class="setup-keys" id="setup-keys">
+            <summary>Streaming keys <span class="hint">optional - only after the week-4 review</span></summary>
+            <div class="setup-keys-body" id="setup-keys-body"></div>
+            <div class="hint">Sent once to the homelab and written into the bot's environment. Never stored here, never shown again. Blank fields leave the current value alone. The bot restarts to pick them up, which takes about a minute.</div>
+          </details>
+
+          <div class="setup-actions">
+            <button type="submit" class="btn btn-primary" id="setup-run">Connect this server</button>
+            <span class="board-slot-error" id="setup-error"></span>
+          </div>
+        </form>
+        <div id="setup-steps"></div>
+      </section>
+
+      <section class="setup-card">
+        <div class="setup-card-head">
+          <h3>Bots</h3>
+          <span class="hint">Restarts the bot and the Fomo sidecar on the homelab. Alerts pause for about a minute.</span>
+        </div>
+        <div class="setup-actions">
+          <button class="btn" id="setup-restart">Restart bots</button>
+          <button class="btn btn-danger" id="setup-restart-confirm" hidden>Yes, restart now</button>
+          <button class="btn btn-sm" id="setup-restart-cancel" hidden>Cancel</button>
+          <span class="board-slot-error" id="setup-restart-error"></span>
+        </div>
+        <div id="setup-job"></div>
+        <div id="setup-jobs"></div>
+      </section>
+    </div>`
+}
+
+function wireSetup() {
+  document.getElementById('setup-form')?.addEventListener('submit', (event) => {
+    event.preventDefault()
+    runSetup()
+  })
+
+  const restart = document.getElementById('setup-restart')
+  const confirm = document.getElementById('setup-restart-confirm')
+  const cancel = document.getElementById('setup-restart-cancel')
+  // Two clicks rather than a browser confirm(): the second button appears
+  // beside the first, so a slip of the mouse cannot restart anything.
+  restart?.addEventListener('click', () => {
+    restart.hidden = true
+    confirm.hidden = false
+    cancel.hidden = false
+  })
+  cancel?.addEventListener('click', () => {
+    restart.hidden = false
+    confirm.hidden = true
+    cancel.hidden = true
+  })
+  confirm?.addEventListener('click', () => {
+    restart.hidden = false
+    confirm.hidden = true
+    cancel.hidden = true
+    restartBots()
+  })
+}
+
+function stopSetupPolling() {
+  if (state.setupPollTimer) {
+    clearTimeout(state.setupPollTimer)
+    state.setupPollTimer = null
+  }
+  state.setupJob = null
+}
+
+async function loadSetup() {
+  const status = document.getElementById('setup-status')
+  if (!status) return
+
+  try {
+    state.setup = await api(`/api/guilds/${state.guildId}/setup`)
+  } catch (err) {
+    status.innerHTML = `<div class="banner">Could not load setup status: ${esc(err.message)}</div>`
+    return
+  }
+  if (state.view !== 'setup') return
+
+  renderSetupStatus()
+  renderSetupForm()
+  renderSetupJobs()
+}
+
+function renderSetupStatus() {
+  const s = state.setup
+  const el = document.getElementById('setup-status')
+  if (!el || !s) return
+
+  const cmdOk = s.commands.registered !== null && s.commands.registered >= s.commands.shipped
+  const cmdText = s.commands.registered === null ? '?' : `${s.commands.registered}/${s.commands.shipped}`
+
+  const trialOn = s.trialRows.filter((r) => r.enabled)
+  const trialChannels = [...new Set(trialOn.map((r) => r.channelName ? `#${r.channelName}` : r.channelId))]
+  const trialText = trialOn.length === 0 ? 'not set' : trialChannels.join(', ')
+
+  const helius = s.env.HELIUS_API_KEY
+  const alchemy = s.envKeys.filter((k) => k.group === 'alchemy').map((k) => s.env[k.key])
+  const alchemySet = alchemy.filter(Boolean).length
+
+  const runnerText = !s.runner.configured
+    ? 'not configured'
+    : s.runner.online
+      ? 'online'
+      : s.runner.lastSeenAt
+        ? `last seen ${relTime(s.runner.lastSeenAt)}`
+        : 'not seen since the bot started'
+
+  const cards = [
+    { k: 'Bot in server', n: '✓', ok: true, sub: `${esc(s.guild.name)} · ${s.guild.memberCount ?? '?'} members` },
+    { k: 'Slash commands', n: cmdText, ok: cmdOk, sub: cmdOk ? 'registered here' : 'run Connect to register' },
+    { k: 'Trial channel', n: trialOn.length ? '✓' : '–', ok: trialOn.length > 0, sub: esc(trialText) },
+    { k: 'Helius', n: helius ? '✓' : '–', ok: helius, sub: helius ? 'key set' : 'no key - Solana at poll speed' },
+    { k: 'Alchemy', n: `${alchemySet}/${alchemy.length}`, ok: alchemySet === alchemy.length, sub: alchemySet ? 'endpoints set' : 'none - EVM at poll speed' },
+    { k: 'Homelab runner', n: s.runner.online ? '✓' : '–', ok: s.runner.online, sub: runnerText },
+  ]
+
+  el.innerHTML = `<div class="stats setup-stats">${cards
+    .map(
+      (c) => `<div class="stat">
+        <div class="n${c.ok ? ' accent' : ''}">${c.n}</div>
+        <div class="k">${c.k}</div>
+        <div class="setup-stat-sub">${c.sub}</div>
+      </div>`,
+    )
+    .join('')}</div>`
+}
+
+function renderSetupForm() {
+  const s = state.setup
+  if (!s) return
+
+  const channel = document.getElementById('setup-channel')
+  if (channel) {
+    const current = channel.value
+    channel.innerHTML =
+      `<option value="">– commands only –</option>` +
+      state.channels
+        .map(
+          (c) =>
+            `<option value="${esc(c.id)}"${!c.sendable ? ' disabled' : ''}>#${esc(c.name)}${c.parent ? ` · ${esc(c.parent)}` : ''}${!c.sendable ? ' (bot cannot post here)' : ''}</option>`,
+        )
+        .join('')
+    // Keep a pick across a status reload; otherwise suggest the channel
+    // already carrying the trial features, if there is one.
+    const existing = s.trialRows.find((r) => r.enabled)?.channelId
+    channel.value = current || existing || ''
+  }
+
+  const role = document.getElementById('setup-role')
+  if (role) {
+    const current = role.value
+    role.innerHTML =
+      `<option value="">– none –</option>` +
+      state.roles
+        .map((r) => `<option value="${esc(r.id)}">@${esc(r.name)}${r.pingable ? '' : ' (not pingable yet)'}</option>`)
+        .join('')
+    role.value = current
+  }
+
+  const keys = document.getElementById('setup-keys-body')
+  if (keys && !keys.dataset.rendered) {
+    keys.dataset.rendered = '1'
+    const groups = [
+      { id: 'helius', title: 'Helius - Solana', note: 'Part two of the guide.' },
+      { id: 'alchemy', title: 'Alchemy - Ethereum, BSC and Base', note: 'Part three. Six URLs, HTTPS and WebSocket per chain.' },
+    ]
+    keys.innerHTML = groups
+      .map(
+        (g) => `<div class="setup-key-group">
+          <div class="setup-key-title">${g.title} <span class="hint">${g.note}</span></div>
+          <div class="setup-fields">
+            ${s.envKeys
+              .filter((k) => k.group === g.id)
+              .map(
+                (k) => `<label class="setup-field">
+                  <span class="setup-label">${esc(k.label)} ${s.env[k.key] ? '<em class="setup-set">set</em>' : ''}</span>
+                  <input type="${k.key === 'HELIUS_API_KEY' ? 'password' : 'text'}" class="board-ca-input" name="env.${esc(k.key)}" placeholder="${esc(k.placeholder)}" spellcheck="false" autocomplete="off" />
+                </label>`,
+              )
+              .join('')}
+          </div>
+        </div>`,
+      )
+      .join('')
+
+    if (!s.runner.configured) {
+      keys.insertAdjacentHTML(
+        'afterbegin',
+        `<div class="banner">The homelab runner is not configured, so keys cannot be applied from here. Send them to Wayne by DM instead.</div>`,
+      )
+    }
+  }
+}
+
+function renderSetupSteps(steps, target = 'setup-steps') {
+  const el = document.getElementById(target)
+  if (!el) return
+  if (!steps || steps.length === 0) {
+    el.innerHTML = ''
+    return
+  }
+  el.innerHTML = `<ul class="setup-steps">${steps
+    .map(
+      (st) => `<li class="${st.ok ? 'ok' : 'bad'}">
+        <span class="setup-step-mark">${st.ok ? '✓' : '✗'}</span>
+        <span class="setup-step-name">${esc(st.name)}</span>
+        ${st.detail ? `<span class="setup-step-detail">${esc(st.detail)}</span>` : ''}
+      </li>`,
+    )
+    .join('')}</ul>`
+}
+
+async function runSetup() {
+  const form = document.getElementById('setup-form')
+  const button = document.getElementById('setup-run')
+  const error = document.getElementById('setup-error')
+  if (!form || !button) return
+
+  const data = new FormData(form)
+  const body = {}
+  const env = {}
+  for (const [name, value] of data.entries()) {
+    if (name.startsWith('env.')) {
+      if (String(value).trim() !== '') env[name.slice(4)] = String(value)
+    } else if (String(value) !== '') {
+      body[name] = String(value)
+    }
+  }
+  if (Object.keys(env).length > 0) body.env = env
+
+  error.textContent = ''
+  button.disabled = true
+  renderSetupSteps([])
+
+  try {
+    const result = await api(`/api/guilds/${state.guildId}/setup`, { method: 'POST', body: JSON.stringify(body) })
+    renderSetupSteps(result.steps)
+    // The values have left the page. Clearing the fields is what makes
+    // "never shown again" true rather than a promise.
+    for (const input of form.querySelectorAll('input[name^="env."]')) input.value = ''
+
+    if (result.jobId) {
+      watchSetupJob(result.jobId)
+    } else {
+      toast(result.ok ? 'Done.' : 'Finished with problems - see below.', !result.ok)
+      loadSetup()
+    }
+  } catch (err) {
+    error.textContent = err.message
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function restartBots() {
+  const error = document.getElementById('setup-restart-error')
+  const button = document.getElementById('setup-restart')
+  error.textContent = ''
+  button.disabled = true
+  try {
+    const { jobId } = await api(`/api/guilds/${state.guildId}/ops/restart`, { method: 'POST', body: '{}' })
+    watchSetupJob(jobId)
+  } catch (err) {
+    error.textContent = err.message
+  } finally {
+    button.disabled = false
+  }
+}
+
+/**
+ * Polls one job to its end. Errors are expected in the middle - the job's
+ * whole point may be to restart the process answering - so a failed poll is a
+ * retry, not a stop. Only the clock ends it early.
+ */
+function watchSetupJob(jobId) {
+  stopSetupPolling()
+  state.setupJob = { jobId, startedAt: Date.now() }
+  renderSetupJob({ jobId, status: 'queued' })
+
+  const tick = async () => {
+    if (state.view !== 'setup' || state.setupJob?.jobId !== jobId) return
+
+    let job
+    try {
+      ;({ job } = await api(`/api/guilds/${state.guildId}/ops/jobs/${jobId}`))
+    } catch {
+      job = { jobId, status: 'claimed', restarting: true }
+    }
+    renderSetupJob(job)
+
+    if (job.status === 'done' || job.status === 'failed') {
+      state.setupJob = null
+      toast(job.result?.summary ?? (job.status === 'done' ? 'Done.' : 'Failed.'), job.status !== 'done')
+      loadSetup()
+      return
+    }
+    if (Date.now() - state.setupJob.startedAt > SETUP_JOB_TIMEOUT_MS) {
+      state.setupJob = null
+      renderSetupJob({ ...job, timedOut: true })
+      loadSetup()
+      return
+    }
+    state.setupPollTimer = setTimeout(tick, SETUP_JOB_POLL_MS)
+  }
+  state.setupPollTimer = setTimeout(tick, SETUP_JOB_POLL_MS)
+}
+
+function renderSetupJob(job) {
+  const el = document.getElementById('setup-job')
+  if (!el) return
+
+  const label =
+    job.timedOut
+      ? 'Still running after several minutes. Check the homelab.'
+      : job.status === 'queued'
+        ? 'Queued - waiting for the homelab runner to pick it up…'
+        : job.status === 'claimed'
+          ? job.restarting
+            ? 'Running - the bot is restarting, this page will reconnect…'
+            : 'Running on the homelab…'
+          : job.status === 'done'
+            ? 'Done.'
+            : 'Failed.'
+
+  el.innerHTML = `<div class="setup-job ${job.status}${job.timedOut ? ' bad' : ''}">
+    <span class="setup-job-spinner"></span>
+    <span>${esc(label)}</span>
+    ${job.result?.summary && (job.status === 'done' || job.status === 'failed') ? `<span class="hint">${esc(job.result.summary)}</span>` : ''}
+  </div>`
+  if (job.result?.steps?.length) {
+    el.insertAdjacentHTML('beforeend', `<div id="setup-job-steps-holder"></div>`)
+    renderSetupSteps(job.result.steps, 'setup-job-steps-holder')
+  }
+}
+
+function renderSetupJobs() {
+  const el = document.getElementById('setup-jobs')
+  const jobs = state.setup?.jobs ?? []
+  if (!el) return
+  if (jobs.length === 0) {
+    el.innerHTML = ''
+    return
+  }
+
+  const what = (j) =>
+    j.type === 'restart'
+      ? `Restart ${(j.services ?? []).join(', ')}`
+      : `Set ${(j.envKeys ?? []).join(', ')}`
+
+  el.innerHTML = `<table class="watchlist-table setup-jobs">
+    <thead><tr><th>When</th><th>What</th><th>By</th><th>Outcome</th></tr></thead>
+    <tbody>${jobs
+      .map(
+        (j) => `<tr>
+          <td>${esc(relTime(j.createdAt))}</td>
+          <td>${esc(what(j))}</td>
+          <td>${esc(j.requestedByName)}</td>
+          <td class="setup-job-${j.status}">${esc(j.status)}${j.result?.summary ? ` <span class="hint">${esc(j.result.summary)}</span>` : ''}</td>
+        </tr>`,
+      )
+      .join('')}</tbody>
+  </table>`
+}
+
 // ----------------------------------------------------------------- holdings
 
 /**
@@ -2592,6 +3018,7 @@ const HASH_BY_VIEW = {
   wallets: '#/wallets',
   board: '#/board',
   alerts: '#/alerts',
+  setup: '#/setup',
   holdings: '#/holdings',
 }
 const VIEW_BY_HASH = {
@@ -2603,6 +3030,7 @@ const VIEW_BY_HASH = {
   '#/wallets': 'wallets',
   '#/board': 'board',
   '#/alerts': 'alerts',
+  '#/setup': 'setup',
   '#/holdings': 'holdings',
 }
 

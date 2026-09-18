@@ -5,6 +5,69 @@ strictly by date, because most of it landed together.
 
 ---
 
+## 2026-09-18 (The Setup tab: bringing a server up with nobody at a workstation)
+
+The setup guide sent to Ash and Leon splits the work into "your part" (invite
+the bot, sign in, pick a channel) and "my part" (move the slash commands,
+apply the Helius key and the six Alchemy URLs). The second half needed Wayne
+at a workstation with SSH to the homelab, and the invite could happen at any
+hour. This change makes the second half a button on the dashboard - and makes
+the most important piece of it happen with no button at all.
+
+**Slash commands register themselves, per guild.** They were registered once,
+guild-scoped to the test server via `DISCORD_GUILD_ID`, so a freshly invited
+server had no `/price`. The bot now does a bulk PUT for every guild on ready
+and for the new guild on `guildCreate` (`src/discord/register-commands.ts`).
+Per guild rather than global, which the guide had promised: global takes
+Discord up to an hour to fan out and would double up beside any guild-scoped
+set, while per guild is instant and one request per guild per boot. The one
+failure that matters - an invite without the `applications.commands` scope -
+is named as that rather than as a generic error, because the fix is a
+re-invite and nothing on this side.
+
+**The Setup tab** (`#/setup`) shows where a server stands (commands
+registered, trial channel set, keys present, runner online) and has two
+buttons. *Connect this server* registers commands, switches on Market Lookup,
+Price Alerts and Coin Tracker in the chosen channel (the guide's step 04),
+applies a ping role where a feature has a `mentionRoles` field, and queues
+any streaming keys. *Restart bots* restarts `bot` and `fomo-sidecar`. Each
+step reports on its own; a failed one does not stop the next.
+
+**The runner.** A bot in a container cannot rewrite its own env file or
+restart itself, and giving it a Docker socket would be handing the web a root
+shell. So the shape is inverted: `deploy/homelab/ops-runner/ops-runner.py`,
+a systemd `--user` service on the homelab, polls the bot on loopback with
+`OPS_RUNNER_SECRET`, claims one job at a time, and reports back by id.
+Nothing it receives is executed - a job is `apply-env` or `restart`, with
+arguments checked against allowlists on *both* sides (`src/ops/env-keys.ts`;
+restated in the runner because it is the process with write access to the
+file that holds `DISCORD_TOKEN`). Seven keys are settable and nothing else;
+two services are restartable and nothing else.
+
+**Where the keys are, at every moment.** Typed into the form, sent once, held
+in the bot's memory (`src/ops/jobs.ts`) until the runner claims the job, and
+from then on only in `.env.homelab` - backed up first, 0600, written
+atomically. Mongo's `ops_jobs` holds which keys, who, when and how it went,
+never a value; the fields on the page are cleared the moment the request
+returns. A bot restart between queue and claim loses the values, and the job
+is marked failed on the next boot rather than left looking pending. Because an
+`apply-env` recreates the bot, the process that queued the job is never the
+one that hears the result - which is why the record is in Mongo and the runner
+reports by id.
+
+**Two things easy to get wrong**, both commented at the site: `RestartCount`
+only resets on recreate, so the runner judges "crashed" against the count
+before the job rather than against zero; and the recreate is `up -d --no-build
+bot` with no `--remove-orphans`, because that flag has deleted another
+project's containers on this box before (`DEPLOY.md`).
+
+New: `src/ops/{env-keys,jobs,routes}.ts`, `src/discord/register-commands.ts`,
+`deploy/homelab/ops-runner/`, `src/ops/__tests__/env-keys.test.ts`. Changed:
+`discord/client.ts` (ready/guildCreate hooks), `config.ts`, `db/{models,mongo}.ts`,
+`web/server.ts`, `web/public/{app.js,styles.css}`, `docker-compose.yml`.
+
+---
+
 ## 2026-09-11 (The Fomo feed page, and a record that outlives the post)
 
 `/fomo` on the dashboard: buys, sells and theses as they land, and the trades

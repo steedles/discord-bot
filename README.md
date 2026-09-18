@@ -40,10 +40,14 @@ At <https://discord.com/developers/applications>:
 3. **OAuth2 → Client Secret** → `DISCORD_CLIENT_SECRET` *(dashboard only)*
 4. **OAuth2 → Redirects** → add `<DASHBOARD_URL>/auth/callback`, exactly.
    Production is `https://steedlescrypto.dohbelisk.com/auth/callback`
-5. Put your server's ID in `DISCORD_GUILD_ID` so command changes appear
-   instantly instead of taking up to an hour
-6. Invite the bot with the `bot` and `applications.commands` scopes, and the
-   *Send Messages* + *Embed Links* permissions
+5. Invite the bot with the `bot` and `applications.commands` scopes, and the
+   *View Channels*, *Send Messages*, *Embed Links*, *Attach Files* and *Read
+   Message History* permissions (`permissions=117760`)
+
+Slash commands register themselves: the bot does a per-guild registration on
+every boot and the moment it joins a server, so a new server has `/price`
+within seconds. `pnpm commands:deploy` remains for a one-off from a
+workstation (guild-scoped when `DISCORD_GUILD_ID` is set, else global).
 
 **Token Brief needs the privileged Message Content intent.** Enable it under
 **Bot → Privileged Gateway Intents → Message Content Intent**, or login fails
@@ -272,7 +276,8 @@ that chain with a matching symbol and real liquidity.
 |---|---|---|
 | `DISCORD_TOKEN` | – | Required |
 | `DISCORD_CLIENT_ID` | – | Required |
-| `DISCORD_GUILD_ID` | – | Set for instant command updates |
+| `DISCORD_GUILD_ID` | – | Only for `pnpm commands:deploy`; the running bot registers per guild by itself |
+| `OPS_RUNNER_SECRET` | – | Enables the Setup tab's homelab jobs. See `deploy/homelab/ops-runner/` |
 | `MONGO_URI` | `mongodb://127.0.0.1:27020` | Dev container port |
 | `MONGO_DB` | `discord_bot` | |
 | `PRICE_POLL_SECONDS` | `60` | Minimum 15 |

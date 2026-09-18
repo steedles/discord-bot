@@ -23,6 +23,7 @@ import type {
   FomoAlertTrade,
   StoredCandle,
   CandlePool,
+  OpsJob,
 } from './models.js'
 
 let client: MongoClient | undefined
@@ -50,6 +51,8 @@ export interface Collections {
   /** The kept record, as against the dedup ledger above. */
   fomoAlerts: Collection<FomoAlert>
   fomoAlertTrades: Collection<FomoAlertTrade>
+  /** Audit of dashboard-queued host jobs. Key names and outcomes, never values. */
+  opsJobs: Collection<OpsJob>
   /** @deprecated Read only by the one-time migration off the old scanner config. */
   guilds: Collection<GuildConfig>
 }
@@ -84,6 +87,7 @@ export async function connectMongo(): Promise<Collections> {
     fomoEvents: db.collection<FomoSeenEvent>('fomo_events'),
     fomoAlerts: db.collection<FomoAlert>('fomo_alerts'),
     fomoAlertTrades: db.collection<FomoAlertTrade>('fomo_alert_trades'),
+    opsJobs: db.collection<OpsJob>('ops_jobs'),
     guilds: db.collection<GuildConfig>('guilds'),
   }
 
@@ -143,6 +147,12 @@ async function ensureIndexes(c: Collections): Promise<void> {
     c.fomoAlertTrades.createIndex({ status: 1, openedAt: -1 }),
 
     c.guilds.createIndex({ guildId: 1 }, { unique: true }),
+
+    c.opsJobs.createIndex({ jobId: 1 }, { unique: true }),
+    c.opsJobs.createIndex({ status: 1, createdAt: 1 }),
+    // An audit trail, so it is kept for a while - but it is only ever read
+    // from the Setup tab, and a year-old restart tells nobody anything.
+    c.opsJobs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 }),
 
     c.seenTokens.createIndex(
       { guildId: 1, channelId: 1, chainId: 1, tokenAddress: 1 },

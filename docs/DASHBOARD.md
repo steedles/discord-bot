@@ -180,6 +180,12 @@ All routes are same-origin and cookie-authenticated. Guild-scoped routes return
 | `GET` | `/api/fomo/health` | Sidecar feed state; no auth required |
 | `POST` | `/api/fomo/events` | Sidecar ingest. **Shared secret**, not a session |
 | `POST` | `/api/fomo/trades` | Report a trade taken on an alert. **Shared secret** |
+| `GET` | `/api/guilds/:id/setup` | Setup tab status: commands, trial rows, key presence, runner, recent jobs |
+| `POST` | `/api/guilds/:id/setup` | Connect this server. `{ channelId?, roleId?, env? }` → `{ ok, steps[], jobId? }` |
+| `POST` | `/api/guilds/:id/ops/restart` | Queue a restart of `bot` + `fomo-sidecar` → `{ jobId }` |
+| `GET` | `/api/guilds/:id/ops/jobs/:jobId` | One job's status and result |
+| `GET` | `/api/ops/runner/next` | Runner claims the oldest queued job. **Shared secret** (`OPS_RUNNER_SECRET`) |
+| `POST` | `/api/ops/runner/jobs/:jobId/result` | Runner reports the outcome. **Shared secret** |
 
 ### `PUT /api/guilds/:id/instances`
 
@@ -268,6 +274,51 @@ The contract, for whatever executes first:
 
 Upserts on `tradeRef`, so the natural lifecycle is three reports - intent,
 fill, close - against one row.
+
+---
+
+## The Setup tab
+
+The companion to the setup guide's "your part / my part" split. Everything the
+guide has Wayne doing *after* an invite is a button here, so a server can be
+brought up by whoever invited the bot, at whatever hour.
+
+The status strip says where this server stands: bot in server, slash commands
+registered (registered/shipped), trial channel set, Helius and Alchemy keys
+present (presence only - a value is never shown), and whether the homelab
+runner is online.
+
+**Connect this server** does, in order and reporting each step on its own:
+
+1. Registers the slash commands for this guild. Instant, and safe to repeat -
+   the bot also does this by itself on every boot and the moment it joins a
+   server (`src/discord/register-commands.ts`), so a guild invited at 3am has
+   its commands before anyone presses anything. The one way it fails is an
+   invite made without the `applications.commands` scope, and the step says
+   so rather than reporting a generic error.
+2. Switches on Market Lookup, Price Alerts and Coin Tracker in the chosen
+   trial channel - the guide's step 04. A blank channel means commands only.
+3. Applies the ping role to Price Alerts, and to any alert feature already on
+   in that channel. Features whose schema has no `mentionRoles` field are
+   skipped, not special-cased.
+4. Queues any streaming keys for the homelab runner. The bot cannot change its
+   own environment, so this is a job the runner picks up: rewrite
+   `.env.homelab`, recreate `bot`, wait for health. The page polls the job
+   through the restart. See `deploy/homelab/ops-runner/README.md`.
+
+Keys typed into the form are sent once. The bot holds them in memory until the
+runner claims the job, Mongo records only which keys were set and by whom, and
+the fields are cleared the moment the request returns. Blank fields leave the
+current value alone - there is no way to *clear* a key from here, by design.
+
+**Restart bots** queues a restart of `bot` and `fomo-sidecar`. Two clicks,
+no browser dialog. Recent jobs are listed underneath with who asked and what
+came back.
+
+Access is the same as everything else on the dashboard: Manage Server on the
+selected guild, or a login + password account. The jobs themselves are
+bot-wide - the keys are one bot's keys - which is fine while the bot serves
+one group of people, and would need an owner gate if it ever served two.
 
 ---
 

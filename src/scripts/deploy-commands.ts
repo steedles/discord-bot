@@ -1,8 +1,14 @@
 /**
- * Registers slash commands with Discord.
+ * Registers slash commands with Discord, from a workstation.
  *
  *   pnpm commands:deploy    register (guild-scoped if DISCORD_GUILD_ID is set)
  *   pnpm commands:clear     remove every registered command
+ *
+ * The running bot does this by itself, per guild, on every boot and whenever
+ * it joins a server (src/discord/register-commands.ts) - so this script is
+ * for the cases that path does not cover: registering globally, or clearing.
+ * Do not register globally AND leave the per-guild sets in place; Discord
+ * shows both, so every command appears twice.
  */
 import { REST, Routes } from 'discord.js'
 import { config } from '../config.js'

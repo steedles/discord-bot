@@ -12,6 +12,7 @@ import type { FomoWatchWorker } from '../workers/fomo-watch.js'
 import { setSessionCookie } from './auth.js'
 import { registerRoutes } from './routes.js'
 import { registerFomoRoutes } from '../integrations/fomo/routes.js'
+import { registerOpsRoutes } from '../ops/routes.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -100,6 +101,9 @@ export class DashboardServer {
     )
 
     registerRoutes(app, this.client)
+    // The Setup tab and the homelab runner's job queue. Same listener, same
+    // reasoning as the two below: one origin, and the runner has no session.
+    registerOpsRoutes(app, this.client)
 
     if (this.options.volumeMonitor) {
       registerWebhookRoutes(app, this.options.volumeMonitor)

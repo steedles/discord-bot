@@ -47,4 +47,5 @@ export const log = {
   signals: logger.child({ mod: 'signals' }),
   telegram: logger.child({ mod: 'telegram' }),
   fomo: logger.child({ mod: 'fomo' }),
+  ops: logger.child({ mod: 'ops' }),
 }
