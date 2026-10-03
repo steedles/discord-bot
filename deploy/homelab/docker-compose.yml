@@ -238,8 +238,19 @@ volumes:
   # Dated log files, pruned after 14 days by the app. Survives `up --build`,
   # which is the whole point: Docker's own logs do not.
   bot-logs:
+
   # The Chrome profile holding the Fomo session. Written by fomo-login, read by
   # fomo-sidecar. This is a CREDENTIAL - it is what a logged-in Fomo (and
   # Google) session looks like on disk. Never bake it into an image, never copy
   # it off the host, and remove it if the account is ever retired.
   fomo-profile:
+
+# The homelab's new LAN is 192.168.0.0/24. Docker previously assigned this
+# stack 192.168.0.0/20, which overlaps the physical network and leaves
+# containers unable to reach the internet. Keep the application network in an
+# unambiguous private range instead.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.250.0.0/24
