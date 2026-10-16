@@ -45,6 +45,7 @@ export function readings(
     volM5?: number | ((index: number) => number)
     volH1?: number | ((index: number) => number)
     priceUsd?: number | ((index: number) => number)
+    marketCapUsd?: number | ((index: number) => number)
     endAt?: number
   } = {},
 ): Reading[] {
@@ -62,6 +63,7 @@ export function readings(
       volM5: pick(options.volM5, i),
       volH1: pick(options.volH1, i),
       priceUsd: pick(options.priceUsd, i),
+      marketCapUsd: pick(options.marketCapUsd, i),
     }
   })
 }

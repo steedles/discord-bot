@@ -107,11 +107,13 @@ export function normaliseActivity(payload: unknown, now: Date = new Date()): Nor
       traderHandle: str(p.userHandle),
       traderName: str(p.displayName),
       traderVerified: p.verified === true,
+      traderAvatarUrl: str(p.profilePictureLink),
 
       chainId: chainIdForNetwork(networkId ?? num(p.comment?.networkId)),
       networkId: networkId ?? num(p.comment?.networkId),
       tokenAddress,
       ticker: str(p.ticker),
+      tokenImageUrl: str(p.tokenImageUrl),
 
       usdAmount: num(p.usdAmount),
       price: num(p.price),

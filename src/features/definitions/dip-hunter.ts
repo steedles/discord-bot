@@ -27,7 +27,7 @@ export const DIP_HUNTER: FeatureDescriptor = {
   commands: [],
   help: {
     detail: [
-      'Two alerts, one pair. The first fires when a watched token is far enough below its own recent high; that arms a follow-up which posts when the price climbs back past the recovery target. A dip that never recovers is forgotten after the wait, and the token becomes eligible for a fresh one.',
+      'Two alerts, one pair. The first fires when a watched token is far enough below its own recent high and quotes that move in market cap; that arms a follow-up which replies to the same message when price climbs back past the recovery target. A dip that never recovers is forgotten after the wait, and the token becomes eligible for a fresh one.',
       'The high comes from our own recorded readings, not from the upstream. "Down 5% against an hour ago" is a different question - a token that ran to 3x and gave it all back reads as flat on that measure, while the peak only exists in a series.',
       'A drawdown is only as old as the history behind it. A token added ten minutes ago genuinely can be 60% off its high, but it is a ten-minute high - so the detector refuses below its minimum coverage, and every headline names the span actually measured rather than the one configured.',
     ],

@@ -77,7 +77,7 @@ echo "==> Checking SSH to $HOMELAB_SSH"
 if ! remote 'echo ok' >/dev/null 2>&1; then
   echo "Cannot reach $HOMELAB_SSH." >&2
   echo "The homelab IP is DHCP-assigned and has moved before. Re-find it with:" >&2
-  echo '  for i in $(seq 100 130); do nc -z -G 1 192.168.68.$i 22 && echo "$i open"; done' >&2
+  echo '  for i in $(seq 1 254); do nc -z -G 1 192.168.0.$i 22 && echo "$i open"; done' >&2
   exit 1
 fi
 

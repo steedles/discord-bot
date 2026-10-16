@@ -13,12 +13,14 @@ import type {
   RugCheck,
   SeenToken,
   Session,
+  DashboardAccess,
   VolumeSnapshot,
   WatchedToken,
   TrackedWallet,
   CustomBoard,
   TelegramWatch,
   FomoSeenEvent,
+  FomoServerRoute,
   FomoAlert,
   FomoAlertTrade,
   StoredCandle,
@@ -34,6 +36,8 @@ export interface Collections {
   coinTrackers: Collection<CoinTracker>
   featureInstances: Collection<FeatureInstance>
   sessions: Collection<Session>
+  /** Password-login allow-lists. One row per sign-in name. */
+  dashboardAccess: Collection<DashboardAccess>
   seenTokens: Collection<SeenToken>
   pendingMints: Collection<PendingMint>
   volumeSnapshots: Collection<VolumeSnapshot>
@@ -48,6 +52,8 @@ export interface Collections {
   customBoards: Collection<CustomBoard>
   telegramWatches: Collection<TelegramWatch>
   fomoEvents: Collection<FomoSeenEvent>
+  /** Which followed accounts each Discord server is allowed to hear. */
+  fomoRoutes: Collection<FomoServerRoute>
   /** The kept record, as against the dedup ledger above. */
   fomoAlerts: Collection<FomoAlert>
   fomoAlertTrades: Collection<FomoAlertTrade>
@@ -71,6 +77,7 @@ export async function connectMongo(): Promise<Collections> {
     coinTrackers: db.collection<CoinTracker>('coin_trackers'),
     featureInstances: db.collection<FeatureInstance>('feature_instances'),
     sessions: db.collection<Session>('sessions'),
+    dashboardAccess: db.collection<DashboardAccess>('dashboard_access'),
     seenTokens: db.collection<SeenToken>('seen_tokens'),
     pendingMints: db.collection<PendingMint>('pending_mints'),
     volumeSnapshots: db.collection<VolumeSnapshot>('volume_snapshots'),
@@ -85,6 +92,7 @@ export async function connectMongo(): Promise<Collections> {
     customBoards: db.collection<CustomBoard>('custom_boards'),
     telegramWatches: db.collection<TelegramWatch>('telegram_watches'),
     fomoEvents: db.collection<FomoSeenEvent>('fomo_events'),
+    fomoRoutes: db.collection<FomoServerRoute>('fomo_routes'),
     fomoAlerts: db.collection<FomoAlert>('fomo_alerts'),
     fomoAlertTrades: db.collection<FomoAlertTrade>('fomo_alert_trades'),
     opsJobs: db.collection<OpsJob>('ops_jobs'),
@@ -117,6 +125,7 @@ async function ensureIndexes(c: Collections): Promise<void> {
     c.featureInstances.createIndex({ featureId: 1, enabled: 1 }),
 
     c.sessions.createIndex({ sessionId: 1 }, { unique: true }),
+    c.dashboardAccess.createIndex({ email: 1 }, { unique: true }),
     c.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // THE dedup mechanism for Fomo activity. Unique on Fomo's own event id, so a
@@ -124,6 +133,8 @@ async function ensureIndexes(c: Collections): Promise<void> {
     // delivery paths could race. Never on tradeId: a thesis shares the tradeId
     // of the trade it comments on, so that key would swallow theses.
     c.fomoEvents.createIndex({ eventId: 1 }, { unique: true }),
+    // One routing row per Discord server. Missing means "hear everyone".
+    c.fomoRoutes.createIndex({ guildId: 1 }, { unique: true }),
     // A week is far longer than any window in which an event could recur; past
     // that these rows only cost disk.
     c.fomoEvents.createIndex({ seenAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 7 }),

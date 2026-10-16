@@ -19,6 +19,7 @@ import {
   type DexPair,
 } from '../market/dexscreener.js'
 import { PumpPortalWatcher } from '../market/pumpportal.js'
+import { passesHolderGate } from '../monitor/detect/gates.js'
 import { assessToken } from '../risk/assess.js'
 import { getHolderProfile } from '../risk/holders.js'
 import type { RiskReport } from '../risk/index.js'
@@ -362,6 +363,8 @@ export class LaunchScannerWorker {
     const wanted = interested.filter((d) => report.score <= d.read.num('maxRiskScore', 45))
     if (wanted.length === 0) return
 
+    const cleared = await this.passingHolders(pair, wanted)
+
     // Solana only. Fetched unfiltered - whatever verdict is cached, if any,
     // including 'unknown' now that a checked-but-inconclusive attempt is
     // persisted too (see RugCheck in db/models.ts) - because the two
@@ -386,9 +389,43 @@ export class LaunchScannerWorker {
      */
     void sendLaunchSignal(pair, report, rugCheck)
 
-    for (const destination of wanted) {
+    if (cleared.length === 0) return
+
+    for (const destination of cleared) {
       await this.postToDestination(destination, pair, report, source, rugCheck)
     }
+  }
+
+  /**
+   * Holder gate, after every cheap filter and the risk score.
+   *
+   * One lookup for the token, then each channel applies its own floor. Channels
+   * with the floor off are not waiting on the vendor. A missing count fails a
+   * channel that asked for one: unknown is not "few enough to ignore".
+   */
+  private async passingHolders(pair: DexPair, destinations: Destination[]): Promise<Destination[]> {
+    if (!destinations.some((d) => d.read.num('minHolders', 0) > 0)) return destinations
+
+    let holders: number | undefined
+    try {
+      holders = (await getHolderProfile(pair.chainId, pair.baseToken.address)).totalHolders
+    } catch (err) {
+      log.scanner.debug(
+        { err: String(err), token: pair.baseToken.address },
+        'holder count unavailable',
+      )
+    }
+
+    return destinations.filter((d) => {
+      const result = passesHolderGate(holders, d.read.num('minHolders', 0))
+      if (!result.ok) {
+        log.scanner.debug(
+          { token: pair.baseToken.address, channelId: d.channelId, reason: result.reason },
+          'launch dropped on holder gate',
+        )
+      }
+      return result.ok
+    })
   }
 
   private async postToDestination(
@@ -477,6 +514,13 @@ function passesCheapFilters(pair: DexPair, destination: Destination): boolean {
   if (chains.length > 0 && !chains.includes(pair.chainId)) return false
   if ((pair.liquidity?.usd ?? 0) < read.num('minLiquidityUsd', 15_000)) return false
   if ((pair.volume?.h24 ?? 0) < read.num('minVolume24hUsd', 25_000)) return false
+
+  const maxMcap = read.num('maxMarketCapUsd', 0)
+  if (maxMcap > 0) {
+    const mcap = pair.marketCap ?? pair.fdv
+    if (mcap === undefined || mcap > maxMcap) return false
+  }
+
   if (read.bool('requireSocials', true) && !hasSocials(pair)) return false
 
   const age = pairAgeMinutes(pair)

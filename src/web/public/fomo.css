@@ -81,6 +81,168 @@
   font-variant-numeric: tabular-nums;
 }
 
+.fomo-routing {
+  margin-bottom: 28px;
+  padding: 16px 16px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.fomo-routing-head h2 {
+  margin: 0 0 6px;
+}
+
+.fomo-routing-head p {
+  margin: 0 0 14px;
+  max-width: 68ch;
+}
+
+.fomo-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.fomo-add-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fomo-add input[type='text'] {
+  width: 180px;
+}
+
+.fomo-add-error {
+  color: var(--off);
+  font-size: 12px;
+}
+
+.fomo-servers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fomo-server {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.fomo-server-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.fomo-server-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+.fomo-server-where,
+.fomo-server-hearing {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.fomo-routing-empty {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-hi);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-hi);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fomo-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.fomo-mode-btn {
+  padding: 6px 13px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.fomo-mode-btn:hover,
+.fomo-mode-btn.is-on {
+  color: var(--text-hi);
+}
+
+.fomo-mode-btn.is-on {
+  background: var(--panel-hi);
+}
+
+.fomo-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.fomo-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--panel);
+}
+
+.fomo-account.is-on {
+  border-color: var(--line-hi);
+  color: var(--text-hi);
+}
+
+.fomo-account input {
+  margin: 0;
+}
+
+.fomo-server-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fomo-server-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fomo-server-status.is-bad {
+  color: var(--off);
+}
+
 .fomo-cols {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;

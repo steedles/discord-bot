@@ -99,6 +99,23 @@ export interface FeatureInstance {
   updatedBy?: string
 }
 
+/**
+ * Which Discord servers one password login may open.
+ *
+ * Absent, or present with `restricted: false`, means every server the bot
+ * is in. A restricted row is the allow-list chosen on the Access tab. The
+ * owner login is not read from this collection.
+ */
+export interface DashboardAccess {
+  _id?: ObjectId
+  /** Lowercase sign-in name, the same string `DASHBOARD_USERS` is keyed by. */
+  email: string
+  restricted: boolean
+  guildIds: string[]
+  updatedAt: Date
+  updatedBy?: string
+}
+
 /** A logged-in dashboard session. Cookie holds only the signed id. */
 export interface Session {
   _id?: ObjectId
@@ -110,8 +127,9 @@ export interface Session {
   guildIds: string[]
   /**
    * True for an email + password session rather than a Discord one. These have
-   * no Discord identity to check permissions against, so access is decided by
-   * "is the bot in that guild" instead - see `requireGuildAccess`.
+   * no Discord identity to check permissions against. Which servers one may
+   * open is `dashboard_access` when that login has been limited, and every
+   * server the bot is in otherwise - see `requireGuildAccess`.
    */
   local?: boolean
   createdAt: Date
@@ -266,10 +284,16 @@ export interface DipState {
   symbol: string
   /** Price when the drawdown alert was posted. Recovery is measured from this. */
   alertPriceUsd: number
+  /** Market cap at that moment. Absent on rows armed before this was stored. */
+  alertMarketCapUsd?: number
   /** Lowest price seen since the alert. Reported, never compared against. */
   lowPriceUsd: number
+  /** Market cap on the reading that set `lowPriceUsd`. */
+  lowMarketCapUsd?: number
   lowAt: Date
   armedAt: Date
+  /** Discord message id of the dip alert. The recovery replies to it. */
+  alertMessageId?: string
   expiresAt: Date
 }
 
@@ -528,6 +552,25 @@ export interface TelegramWatch {
   telegramChatId?: string
   coins: TrackedCoin[]
   updatedAt: Date
+}
+
+/**
+ * Which followed Fomo accounts one Discord server is allowed to hear.
+ *
+ * The bot follows everyone through a single Fomo login, so the feed itself
+ * cannot tell servers apart. This row is that split. Absent, or present with
+ * `restricted: false`, means the server still hears every account — the
+ * behaviour every existing server had before routing existed. A restricted
+ * row hears only `handles`.
+ */
+export interface FomoServerRoute {
+  _id?: ObjectId
+  guildId: string
+  restricted: boolean
+  /** Lowercase handles, no leading @. Ignored unless `restricted`. */
+  handles: string[]
+  updatedAt: Date
+  updatedBy?: string
 }
 
 /**

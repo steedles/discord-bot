@@ -5,6 +5,7 @@ import type { Session } from '../db/models.js'
 import { getCollections } from '../db/mongo.js'
 import { log } from '../logger.js'
 import { verifyPassword } from './password.js'
+import { guildIdsForSession } from './access.js'
 
 const COOKIE_NAME = 'dbsession'
 const DISCORD_API = 'https://discord.com/api/v10'
@@ -145,12 +146,11 @@ export async function completeLogin(code: string, botGuildIds: Set<string>): Pro
 /**
  * Signs in with email + password and stores a session.
  *
- * Unlike the OAuth path there is no per-guild permission to read, so the
- * session is given every guild the bot is in. That is the intended scope: these
- * accounts exist to configure the bot, and anyone holding one is trusted with
- * all of it. `local` marks the session so `requireGuildAccess` re-checks
- * against the live guild list rather than the snapshot taken at login - the bot
- * joining a new server should not require signing in again.
+ * Unlike the OAuth path there is no per-guild permission to read. With no
+ * access row saved, the session may open every guild the bot is in. A row
+ * from the Access tab narrows that, and `requireGuildAccess` reads it on
+ * each request so a change applies without a new login. `local` marks the
+ * session so that check uses the live guild list rather than a snapshot.
  */
 export async function completePasswordLogin(
   email: string,
@@ -162,19 +162,23 @@ export async function completePasswordLogin(
 
   const sessionId = randomBytes(32).toString('base64url')
   const expiresAt = new Date(Date.now() + config.SESSION_DAYS * 86_400_000)
+  const guildIds = await guildIdsForSession(
+    { local: true, username: account.email, guildIds: [] },
+    botGuildIds,
+  )
 
   const { sessions } = getCollections()
   await sessions.insertOne({
     sessionId,
     userId: `local:${account.email}`,
     username: account.email,
-    guildIds: [...botGuildIds],
+    guildIds,
     local: true,
     createdAt: new Date(),
     expiresAt,
   })
 
-  log.bot.info({ email: account.email, guilds: botGuildIds.size }, 'dashboard password login')
+  log.bot.info({ email: account.email, guilds: guildIds.length }, 'dashboard password login')
   return sessionId
 }
 
@@ -236,9 +240,10 @@ export async function requireSession(
  * Replies 401/403 unless the session may administer `guildId`.
  *
  * A Discord session is limited to the guilds it held Manage Server on when it
- * signed in. A local one is limited to wherever the bot currently is, which
- * `botGuildIds` supplies - passing nothing falls back to the stored list, so a
- * caller that forgets it can only ever be more restrictive, never less.
+ * signed in. A password session is every guild the bot is in, unless the
+ * Access tab has limited that login. Omitting `botGuildIds` falls back to
+ * the list stored on the session, so a caller that forgets it can only ever
+ * be more restrictive, never less.
  */
 export async function requireGuildAccess(
   request: FastifyRequest,
@@ -249,12 +254,9 @@ export async function requireGuildAccess(
   const session = await requireSession(request, reply)
   if (!session) return undefined
 
-  const allowed = session.local && botGuildIds
-    ? botGuildIds.has(guildId)
-    : session.guildIds.includes(guildId)
-
-  if (!allowed) {
-    await reply.code(403).send({ error: 'You do not have Manage Server on that guild' })
+  const allowed = await guildIdsForSession(session, botGuildIds)
+  if (!allowed.includes(guildId)) {
+    await reply.code(403).send({ error: 'You do not have access to that server' })
     return undefined
   }
 

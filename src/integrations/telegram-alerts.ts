@@ -149,7 +149,9 @@ export function telegramMonitorText(
     `${chain?.label ?? snapshot.chainId} · ${snapshot.name}`,
     ...trigger.detail,
     '',
-    `Price ${formatUsdPrice(snapshot.priceUsd)}`,
+    ...(trigger.kind === 'drawdown' || trigger.kind === 'recovery'
+      ? []
+      : [`Price ${formatUsdPrice(snapshot.priceUsd)}`]),
     `MCap ${formatCompactUsd(snapshot.marketCapUsd)}`,
     `Liquidity ${formatCompactUsd(snapshot.liquidityUsd)}`,
     ...(context?.divergence ? [context.divergence] : []),

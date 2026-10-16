@@ -80,6 +80,8 @@ while true; do
     --no-default-browser-check \
     --window-position=0,0 \
     --window-size=1280,880 \
+    --remote-debugging-port=9222 \
+    --remote-debugging-address=127.0.0.1 \
     "${START_URL}"
   echo "==> chromium exited (rc=$?); reopening in 3s - close the CONTAINER when you are done, not the window"
   sleep 3

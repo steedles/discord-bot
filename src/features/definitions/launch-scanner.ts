@@ -14,7 +14,7 @@ export const LAUNCH_SCANNER: FeatureDescriptor = {
   commands: [],
   help: {
     detail: [
-      'Posts newly listed tokens that clear your filters: liquidity, 24h volume, maximum pool age, a vendor risk score and optionally having a website or socials. Two sources - DexScreener\'s new-listing feed across every chain, and pump.fun mints once they reach a real DEX pool, which makes it a graduation feed rather than a raw-launch one.',
+      'Posts newly listed tokens that clear your filters: liquidity, 24h volume, maximum pool age, an optional market-cap ceiling, a minimum holder count, a vendor risk score and optionally having a website or socials. Two sources - DexScreener\'s new-listing feed across every chain, and pump.fun mints once they reach a real DEX pool, which makes it a graduation feed rather than a raw-launch one.',
       'The risk ceiling uses the same vendor scores as `/scan`, so a token nobody will score does not slip through as safe - it fails the filter.',
     ],
     firstStep: 'Enable it in a quiet channel first: a loose filter is a lot of posts.',
@@ -62,6 +62,29 @@ export const LAUNCH_SCANNER: FeatureDescriptor = {
       max: 100_000_000,
       step: 1_000,
       unit: 'USD',
+    },
+    {
+      key: 'maxMarketCapUsd',
+      type: 'number',
+      label: 'Maximum market cap',
+      description:
+        'Drops anything above this. A coin already at a few hundred thousand is not a fresh launch. 0 turns the ceiling off. A missing market cap fails the check rather than skipping it.',
+      default: 0,
+      min: 0,
+      max: 1_000_000_000,
+      step: 5_000,
+      unit: 'USD',
+    },
+    {
+      key: 'minHolders',
+      type: 'number',
+      label: 'Minimum holders',
+      description:
+        'Checked with RugCheck on Solana and GoPlus elsewhere, and only for a launch that already passed the other filters. A token whose holder count nobody will confirm fails this. 0 turns it off.',
+      default: 0,
+      min: 0,
+      max: 1_000_000,
+      step: 50,
     },
     {
       key: 'maxAgeMinutes',

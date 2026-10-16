@@ -2091,3 +2091,50 @@ body.charts-mode .topbar {
 .setup-job-claimed {
   color: var(--warn);
 }
+
+.access-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.access-mode {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.access-mode.is-on {
+  background: var(--panel-hi);
+  color: var(--text-hi);
+}
+
+.access-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.access-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.access-bad {
+  color: var(--off);
+  font-size: 12px;
+}

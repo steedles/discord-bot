@@ -8,7 +8,8 @@ import { config } from '../config.js'
  * people who hold Manage Server on the guild the bot sits in - the OAuth path
  * can only ever admit the latter. This one is deliberately small: accounts live
  * in an environment variable, there is no registration, no reset flow and no
- * user table to get out of step with anything.
+ * user table of passwords. Which servers a login may open is separate, and
+ * lives in `dashboard_access`.
  *
  * Passwords are stored as scrypt hashes, never as plaintext, so a leaked `.env`
  * hands over a work factor rather than a login. Generate an entry with

@@ -440,11 +440,229 @@ function connect() {
   source.addEventListener('ready', () => void backfill())
 }
 
+// --- server routing ------------------------------------------------------
+
+/**
+ * Which Discord servers hear which followed accounts.
+ *
+ * Drafts live here so a re-render (after adding a handle) does not throw
+ * away a server the admin has edited but not saved. The server's copy is
+ * only written back into a draft on save, or on the first load.
+ */
+let routingGuilds = []
+let routingAccounts = []
+const routeDrafts = new Map()
+
+function cleanHandle(raw) {
+  const handle = String(raw).trim().replace(/^@+/, '').toLowerCase()
+  if (!/^[a-z0-9][a-z0-9_.-]{0,79}$/.test(handle)) return null
+  return handle
+}
+
+function accountList() {
+  const byHandle = new Map()
+  for (const account of routingAccounts) byHandle.set(account.handle, account)
+  return [...byHandle.values()].sort((a, b) => a.handle.localeCompare(b.handle))
+}
+
+function draftFor(guildId, fallback) {
+  let draft = routeDrafts.get(guildId)
+  if (!draft) {
+    draft = {
+      restricted: fallback?.restricted ?? false,
+      handles: new Set(fallback?.handles ?? []),
+      status: '',
+      bad: false,
+      saving: false,
+    }
+    routeDrafts.set(guildId, draft)
+  }
+  return draft
+}
+
+function renderRouting() {
+  const root = document.getElementById('routing-list')
+  if (!root) return
+  root.replaceChildren()
+
+  if (routingGuilds.length === 0) {
+    root.append(
+      el(
+        'p',
+        'fomo-routing-empty',
+        'No Discord servers are available on this login. A password login sees every server the bot is in. A Discord login only sees servers where you have Manage Server.',
+      ),
+    )
+    return
+  }
+
+  const accounts = accountList()
+  const list = el('div', 'fomo-servers')
+
+  for (const guild of routingGuilds) {
+    const draft = draftFor(guild.id)
+    const card = el('section', 'fomo-server')
+
+    const head = el('div', 'fomo-server-head')
+    head.append(el('div', 'fomo-server-name', guild.name))
+
+    const toggle = el('div', 'fomo-mode-toggle')
+    toggle.append(modeButton(draft, false, 'Everyone'))
+    toggle.append(modeButton(draft, true, 'Only these accounts'))
+    head.append(toggle)
+    card.append(head)
+
+    const channels = Array.isArray(guild.channels) ? guild.channels : []
+    const where =
+      channels.length > 0
+        ? `Posts into ${channels.map((channel) => channel.name).join(', ')}.`
+        : 'Not posting anywhere yet. Turn on Fomo Watch in a channel on the Features page.'
+    card.append(el('p', 'fomo-server-where', where))
+
+    const hearing = draft.restricted
+      ? draft.handles.size === 0
+        ? 'Hearing nobody until you tick accounts and save.'
+        : `Hearing ${draft.handles.size} account${draft.handles.size === 1 ? '' : 's'}.`
+      : 'Hearing every account the Fomo login follows.'
+    card.append(el('p', 'fomo-server-hearing', hearing))
+
+    if (draft.restricted) {
+      const picks = el('div', 'fomo-accounts')
+      if (accounts.length === 0) {
+        picks.append(el('p', 'hint', 'No accounts yet. Add a handle below, then tick it on this server.'))
+      }
+      for (const account of accounts) {
+        const on = draft.handles.has(account.handle)
+        const label = el('label', `fomo-account${on ? ' is-on' : ''}`)
+        const box = document.createElement('input')
+        box.type = 'checkbox'
+        box.checked = on
+        box.addEventListener('change', () => {
+          if (box.checked) draft.handles.add(account.handle)
+          else draft.handles.delete(account.handle)
+          draft.status = ''
+          renderRouting()
+        })
+        label.append(box)
+        const text = account.name ? `@${account.handle} · ${account.name}` : `@${account.handle}`
+        label.append(document.createTextNode(text))
+        picks.append(label)
+      }
+      card.append(picks)
+    }
+
+    const actions = el('div', 'fomo-server-actions')
+    const save = el('button', 'btn btn-sm btn-primary', 'Save')
+    save.type = 'button'
+    save.disabled = draft.saving
+    save.addEventListener('click', () => void saveRoute(guild.id))
+    actions.append(save)
+    const status = el('span', `fomo-server-status${draft.bad ? ' is-bad' : ''}`, draft.status)
+    actions.append(status)
+    card.append(actions)
+    list.append(card)
+  }
+
+  root.append(list)
+}
+
+function modeButton(draft, restricted, label) {
+  const button = el('button', `fomo-mode-btn${draft.restricted === restricted ? ' is-on' : ''}`, label)
+  button.type = 'button'
+  button.addEventListener('click', () => {
+    if (draft.restricted === restricted) return
+    draft.restricted = restricted
+    draft.status = ''
+    renderRouting()
+  })
+  return button
+}
+
+async function saveRoute(guildId) {
+  const draft = routeDrafts.get(guildId)
+  if (!draft || draft.saving) return
+  draft.saving = true
+  draft.bad = false
+  draft.status = 'Saving…'
+  renderRouting()
+  try {
+    const res = await fetch(`/api/fomo/routing/${guildId}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ restricted: draft.restricted, handles: [...draft.handles] }),
+    })
+    if (res.status === 401) {
+      location.href = '/'
+      return
+    }
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      draft.bad = true
+      draft.status = body.invalid?.length
+        ? `Could not save: ${body.invalid.join(', ')}`
+        : 'Could not save this server.'
+      return
+    }
+    draft.restricted = body.route.restricted
+    draft.handles = new Set(body.route.handles)
+    draft.bad = false
+    draft.status = body.route.restricted
+      ? `Saved · ${body.route.handles.length} account${body.route.handles.length === 1 ? '' : 's'}`
+      : 'Saved · everyone followed'
+  } catch {
+    draft.bad = true
+    draft.status = 'Could not save this server.'
+  } finally {
+    draft.saving = false
+    renderRouting()
+  }
+}
+
+async function loadRouting() {
+  const root = document.getElementById('routing-list')
+  if (!root) return
+  try {
+    const data = await getJson('/api/fomo/routing')
+    routingGuilds = data.guilds ?? []
+    routingAccounts = data.accounts ?? []
+    for (const route of data.routes ?? []) {
+      if (!routeDrafts.has(route.guildId)) draftFor(route.guildId, route)
+    }
+    renderRouting()
+  } catch (err) {
+    if (err.message === 'not signed in') return
+    root.replaceChildren()
+    root.append(el('p', 'fomo-error', 'Could not load server routing.'))
+  }
+}
+
+function wireRoutingAdd() {
+  const form = document.getElementById('routing-add')
+  const input = document.getElementById('routing-handle')
+  const error = document.getElementById('routing-add-error')
+  if (!form || !input) return
+  form.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const handle = cleanHandle(input.value)
+    if (!handle) {
+      error.textContent = 'Enter a Fomo handle, like @orangie.'
+      return
+    }
+    error.textContent = ''
+    if (!routingAccounts.some((account) => account.handle === handle)) {
+      routingAccounts.push({ handle })
+    }
+    input.value = ''
+    renderRouting()
+  })
+}
+
 // --- wiring --------------------------------------------------------------
 
-for (const tab of document.querySelectorAll('.fomo-tab')) {
+for (const tab of document.querySelectorAll('.fomo-filters .fomo-tab')) {
   tab.addEventListener('click', () => {
-    for (const other of document.querySelectorAll('.fomo-tab')) {
+    for (const other of document.querySelectorAll('.fomo-filters .fomo-tab')) {
       other.classList.toggle('is-on', other === tab)
       other.setAttribute('aria-selected', other === tab ? 'true' : 'false')
     }
@@ -465,6 +683,8 @@ filterTextEl.addEventListener('input', () => {
 setInterval(tickTimes, 30_000)
 setInterval(() => void refreshHealth(), 60_000)
 
+wireRoutingAdd()
+void loadRouting()
 void backfill()
 void refreshHealth()
 connect()

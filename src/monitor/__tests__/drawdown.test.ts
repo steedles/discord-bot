@@ -110,6 +110,17 @@ describe('detectDrawdown', () => {
 
     expect(detectDrawdown(snapshot({ priceUsd: undefined }), history, config)).toBeUndefined()
   })
+
+  it('quotes market cap when the high and the current reading both have one', () => {
+    const history = readings(36, {
+      stepMinutes: 5,
+      priceUsd: (i) => (i === 12 ? 4 : 1),
+      marketCapUsd: (i) => (i === 12 ? 8_000_000 : 2_000_000),
+    })
+    const trigger = detectDrawdown(snapshot({ priceUsd: 1.5, marketCapUsd: 3_000_000 }), history, config)
+
+    expect(trigger?.detail[0]).toBe('High $8.00M 120m ago, now $3.00M')
+  })
 })
 
 describe('detectRecovery', () => {
@@ -132,6 +143,18 @@ describe('detectRecovery', () => {
     expect(trigger?.headline).toContain('20.0%')
     expect(trigger?.detail.join(' ')).toContain('Post-alert low')
     expect(trigger?.detail.join(' ')).toContain('50.0%')
+  })
+
+  it('quotes market cap on the way back up when both ends were recorded', () => {
+    const withCaps: ArmedDip = {
+      ...armed,
+      alertMarketCapUsd: 3_000_000,
+      lowMarketCapUsd: 2_400_000,
+    }
+    const trigger = detectRecovery(snapshot({ priceUsd: 1.8, marketCapUsd: 3_600_000 }), withCaps, config)
+
+    expect(trigger?.detail[0]).toBe('Alert mcap $3.00M, now $3.60M (+20.0%)')
+    expect(trigger?.detail[1]).toBe('Post-alert low $2.40M, up 50.0% from it')
   })
 
   it('fires at the alert price when no recovery margin is asked for', () => {

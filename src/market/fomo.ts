@@ -35,6 +35,19 @@ export function fomoUrl(chainId: string, tokenAddress: string): string | undefin
   return `${BASE}/${slug}/${tokenAddress}`
 }
 
+/**
+ * A trader's profile.
+ *
+ * The path is `/profile/<handle>`, which is a real route on fomo.family.
+ * A handle with a slash or whitespace would build a different path, so it
+ * produces no link.
+ */
+export function fomoProfileUrl(handle: string): string | undefined {
+  const trimmed = handle.trim()
+  if (!trimmed || /[\s/\\]/.test(trimmed)) return undefined
+  return `https://fomo.family/profile/${encodeURIComponent(trimmed)}`
+}
+
 /** Whether an alert on this chain can offer a trade link. */
 export function fomoSupports(chainId: string): boolean {
   return chainId in FOMO_CHAIN

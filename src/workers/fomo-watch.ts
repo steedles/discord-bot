@@ -10,6 +10,7 @@ import { recordAlert } from '../integrations/fomo/alert-store.js'
 import { fomoWebhookEnabled, mirrorToWebhook } from '../integrations/fomo/webhook-mirror.js'
 import { FomoHealth } from '../integrations/fomo/health.js'
 import { isStale, normaliseActivity } from '../integrations/fomo/normalise.js'
+import { routeAllows, routesByGuild } from '../integrations/fomo/routing.js'
 import type { FomoActivityEvent } from '../integrations/fomo/types.js'
 import { log } from '../logger.js'
 
@@ -189,8 +190,21 @@ export class FomoWatchWorker {
 
     if (instances.length === 0) return
 
+    // One read for the whole batch of channels. A missing row means the
+    // server still hears everyone; failing to read the table at all means
+    // we do not know who should hear this, so we post to nobody rather than
+    // to every server.
+    let routes: Awaited<ReturnType<typeof routesByGuild>>
+    try {
+      routes = await routesByGuild()
+    } catch (err) {
+      log.fomo.error({ err, eventId: event.eventId }, 'fomo routing unreadable - not posting to discord')
+      return
+    }
+
     for (const instance of instances) {
       if (!instance.channelId) continue
+      if (!routeAllows(routes.get(instance.guildId), event.traderHandle)) continue
       const read = readSettings({ ...defaultSettings(FOMO_WATCH), ...instance.settings })
 
       // What this channel asked for. Turning buys and sells off in one channel

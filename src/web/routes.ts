@@ -40,6 +40,7 @@ import {
   setSessionCookie,
 } from './auth.js'
 import { accounts, clearFailures, isLockedOut, recordFailure } from './password.js'
+import { DASHBOARD_OWNER_EMAIL, guildIdsForSession, isDashboardOwner, saveGrant } from './access.js'
 
 const STATE_COOKIE = 'dboauth'
 
@@ -144,7 +145,7 @@ export function registerRoutes(app: FastifyInstance, client: Client): void {
     const session = await getSession(request)
     if (!session) return reply.send({ authenticated: false })
 
-    const visible = session.local ? [...botGuildIds()] : session.guildIds
+    const visible = await guildIdsForSession(session, botGuildIds())
     const guilds = visible
       .map((id) => client.guilds.cache.get(id))
       .filter((g) => g !== undefined)
@@ -152,8 +153,82 @@ export function registerRoutes(app: FastifyInstance, client: Client): void {
 
     return reply.send({
       authenticated: true,
-      user: { id: session.userId, username: session.username, local: session.local ?? false },
+      user: {
+        id: session.userId,
+        username: session.username,
+        local: session.local ?? false,
+        owner: isDashboardOwner(session),
+      },
       guilds,
+    })
+  })
+
+  /**
+   * Which password logins may open which servers.
+   *
+   * Owner only. Discord logins are not listed: those already stop at Manage
+   * Server, and this table cannot widen that. A login with no row is
+   * reported as unrestricted, which is also how a request from it is treated.
+   */
+  app.get('/api/access', async (request, reply) => {
+    const session = await requireSession(request, reply)
+    if (!session) return
+    if (!isDashboardOwner(session)) return reply.code(403).send({ error: 'Not available for this account.' })
+
+    const guilds = [...client.guilds.cache.values()]
+      .map((guild) => ({ id: guild.id, name: guild.name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    const logins = accounts().map((account) => account.email)
+    const saved = await getCollections().dashboardAccess.find({ email: { $in: logins } }).toArray()
+    const byEmail = new Map(saved.map((row) => [row.email, row]))
+
+    return reply.send({
+      guilds,
+      accounts: logins.map((email) => {
+        const row = byEmail.get(email)
+        return {
+          email,
+          owner: email === DASHBOARD_OWNER_EMAIL,
+          restricted: email === DASHBOARD_OWNER_EMAIL ? false : (row?.restricted ?? false),
+          guildIds: email === DASHBOARD_OWNER_EMAIL ? guilds.map((guild) => guild.id) : (row?.guildIds ?? []),
+        }
+      }),
+    })
+  })
+
+  app.put<{ Params: { email: string }; Body: unknown }>('/api/access/:email', async (request, reply) => {
+    const session = await requireSession(request, reply)
+    if (!session) return
+    if (!isDashboardOwner(session)) return reply.code(403).send({ error: 'Not available for this account.' })
+
+    const email = decodeURIComponent(request.params.email).trim().toLowerCase()
+    if (!accounts().some((account) => account.email === email)) {
+      return reply.code(404).send({ error: 'No login with that name.' })
+    }
+    if (email === DASHBOARD_OWNER_EMAIL) {
+      return reply.code(400).send({ error: 'This login always has every server.' })
+    }
+
+    const body = request.body as { restricted?: unknown; guildIds?: unknown }
+    if (typeof body?.restricted !== 'boolean' || !Array.isArray(body.guildIds)) {
+      return reply.code(400).send({ error: 'Invalid access' })
+    }
+    const known = botGuildIds()
+    const guildIds: string[] = []
+    for (const id of body.guildIds) {
+      if (typeof id !== 'string' || !known.has(id)) {
+        return reply.code(400).send({ error: 'That server is not one the bot is in.' })
+      }
+      guildIds.push(id)
+    }
+
+    const saved = await saveGrant(email, body.restricted, guildIds, session.userId)
+    log.bot.info(
+      { email, restricted: saved.restricted, guilds: saved.guildIds.length, by: session.userId },
+      'dashboard access saved',
+    )
+    return reply.send({
+      account: { email: saved.email, owner: false, restricted: saved.restricted, guildIds: saved.guildIds },
     })
   })
 
@@ -1020,7 +1095,7 @@ export function registerRoutes(app: FastifyInstance, client: Client): void {
   // reading two wallets someone put in config directly, never inferred and
   // never stored.
 
-  const OWNER_EMAIL = 'wayne@steedman.co.za'
+  const OWNER_EMAIL = DASHBOARD_OWNER_EMAIL
   const HOLDINGS_CONCURRENCY = 4
 
   interface WalletPosition {

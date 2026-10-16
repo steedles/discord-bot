@@ -4,7 +4,8 @@ import type { TurnSignal } from '../analysis/trend.js'
 import type { Alert, CoinTracker, RugCheck, TrackedWallet } from '../db/models.js'
 import { explorerUrl, getChain } from '../market/chains.js'
 import { tradeLinksMarkdown } from '../market/trade-links.js'
-import { fomoUrl } from '../market/fomo.js'
+import { fomoProfileUrl, fomoUrl } from '../market/fomo.js'
+import { gmgnUrl } from '../market/trade-links.js'
 import type { FomoActivityEvent } from '../integrations/fomo/types.js'
 import { hasSocials, pairAgeMinutes as dexPairAgeMinutes, type DexPair } from '../market/dexscreener.js'
 import { pairAgeMinutes } from '../monitor/detect/gates.js'
@@ -785,16 +786,20 @@ export function monitorAlertEmbed(
           // current value keeps the line rather than dropping it, because a
           // token watched for four minutes has no "before" and still has a price.
           movementLine('MCap', context?.marketCap, formatCompactUsd(snapshot.marketCapUsd)),
-          movementLine(
-            'Price',
-            context?.price,
-            formatUsdPrice(snapshot.priceUsd),
-            // Same precision as the movement beside it - two figures on one
-            // line disagreeing about decimals reads as a mistake.
-            snapshot.priceChange.h24 !== undefined
-              ? `24h ${snapshot.priceChange.h24 > 0 ? '+' : ''}${snapshot.priceChange.h24.toFixed(1)}%`
-              : undefined,
-          ),
+          // Dip alerts quote market cap in the headline detail. A second price
+          // line is the figure the reader was asked not to have to compare.
+          trigger.kind === 'drawdown' || trigger.kind === 'recovery'
+            ? undefined
+            : movementLine(
+                'Price',
+                context?.price,
+                formatUsdPrice(snapshot.priceUsd),
+                // Same precision as the movement beside it - two figures on one
+                // line disagreeing about decimals reads as a mistake.
+                snapshot.priceChange.h24 !== undefined
+                  ? `24h ${snapshot.priceChange.h24 > 0 ? '+' : ''}${snapshot.priceChange.h24.toFixed(1)}%`
+                  : undefined,
+              ),
           movementLine('Liquidity', context?.liquidity, formatCompactUsd(snapshot.liquidityUsd)),
           statLine('Volume', [
             snapshot.volume.m5 !== undefined && `5m ${formatCompactUsd(snapshot.volume.m5)}`,
@@ -977,38 +982,37 @@ export function successEmbed(message: string): EmbedBuilder {
 /**
  * A buy or sell by a trader the Fomo account follows.
  *
- * Reports what Fomo actually sends and nothing more. There is no transaction
- * hash and no token amount on these payloads, so there is no explorer link and
- * no position size - inventing either from price and USD value would be the
- * same failure as approximating a whale buy from volume over trade count.
+ * The card follows the layout asked for on the review: who traded, how much,
+ * which ticker, the market cap on its own line, the contract, venue links, and
+ * the token image on the right. There is no transaction hash and no token
+ * amount on these payloads, so neither is invented from price and USD value.
+ *
+ * Axiom is absent on purpose. Its URL needs the PumpSwap pool, which is
+ * resolved later and off this path. Linking the mint would be a dead link.
  */
 export function fomoTradeEmbed(event: FomoActivityEvent): EmbedBuilder {
   const buy = event.kind === 'BUY'
-  const chain = event.chainId ? getChain(event.chainId) : undefined
-  const who = event.traderName ?? event.traderHandle ?? 'someone'
-  const ticker = event.ticker ?? 'a token'
+  const who = fomoTraderLink(event)
+  const ticker = fomoTickerLink(event)
+  const size = event.usdAmount !== undefined ? `**${formatCompactUsd(event.usdAmount)}** of ` : ''
+
+  const lines = [`${buy ? '🟢' : '🔴'} ${who} ${buy ? 'bought' : 'sold'} ${size}${ticker}`]
+  const mcap = fomoMcapLine(event)
+  if (mcap) lines.push('', mcap)
 
   const embed = new EmbedBuilder()
     .setColor(buy ? GREEN : RED)
-    .setTitle(`${buy ? '🟢' : '🔴'} ${who} ${buy ? 'bought' : 'sold'} ${ticker}`)
-    .setDescription(
-      statBlock(
-        statLine('Size', [event.usdAmount !== undefined && formatCompactUsd(event.usdAmount)]),
-        statLine('Market cap', [event.marketCap !== undefined && formatCompactUsd(event.marketCap)]),
-        statLine('Price', [event.price !== undefined && formatUsdPrice(event.price)]),
-      ),
-    )
-    // Fomo's own timestamp, not ours: an event delayed in our pipeline should
-    // still read as the moment the trade happened.
+    .setDescription(lines.join('\n'))
     .setTimestamp(event.createdAt)
-    .setFooter({
-      // Naming the chain as unknown is deliberate - networkId 143 is real and
-      // unidentified, and guessing it would put a trade on the wrong chain.
-      text: `fomo · ${chain?.label ?? (event.networkId ? `network ${event.networkId}` : 'unknown chain')}`,
-    })
+    .setFooter({ text: 'fomo' })
 
-  const links = fomoLinks(event)
-  if (links) embed.addFields({ name: 'Links', value: links })
+  applyFomoIdentity(embed, event)
+  const chain = fomoChainLabel(event)
+  if (chain) embed.addFields({ name: 'Network', value: chain })
+  const ca = fomoCaField(event)
+  if (ca) embed.addFields(ca)
+  const links = fomoVenueLinks(event)
+  if (links) embed.addFields({ name: '\u200b', value: links })
   return embed
 }
 
@@ -1019,54 +1023,141 @@ export function fomoTradeEmbed(event: FomoActivityEvent): EmbedBuilder {
  * They arrive as separate events about a minute apart, so merging them would
  * mean holding every buy back on the chance a thesis follows, which would make
  * the fastest signal here the slowest.
+ *
+ * "posted a thesis" links to the token page. Fomo's web app has routes for a
+ * profile and a token, and no route for one thesis, so the token page is the
+ * page that actually shows it.
  */
 export function fomoThesisEmbed(event: FomoActivityEvent): EmbedBuilder {
-  const chain = event.chainId ? getChain(event.chainId) : undefined
-  const who = event.traderName ?? event.traderHandle ?? 'someone'
-  const ticker = event.ticker ?? 'a token'
-  const p = event.position
+  const who = fomoTraderLink(event)
+  const ticker = fomoTickerLink(event)
+  const tokenPage = event.chainId && event.tokenAddress ? fomoUrl(event.chainId, event.tokenAddress) : undefined
+  const thesisWord = tokenPage ? `[thesis](${tokenPage})` : 'thesis'
+  const quote = event.thesis
+    ? `> ${event.thesis.slice(0, 1500).replace(/\n/g, '\n> ')}`
+    : '_no text_'
+
+  const lines = [`💬 ${who} posted a ${thesisWord} on ${ticker}`, '', quote]
+  const mcap = fomoMcapLine(event)
+  if (mcap) lines.push('', mcap)
 
   const embed = new EmbedBuilder()
     .setColor(BLUE)
-    .setTitle(`💭 ${who} on ${ticker}`)
-    .setDescription(
-      [
-        // Discord embeds cap at 4096; leave headroom for the stat block below.
-        event.thesis ? `> ${event.thesis.slice(0, 1500).replace(/\n/g, '\n> ')}` : '_no text_',
-        '',
-        statBlock(
-          statLine('Position', [p?.usdValue !== undefined && formatCompactUsd(p.usdValue)]),
-          statLine('Unrealised', [
-            p?.percentageUnrealizedPnl !== undefined && formatPercent(p.percentageUnrealizedPnl),
-          ]),
-          statLine('Market cap', [event.marketCap !== undefined && formatCompactUsd(event.marketCap)]),
-        ),
-      ].join('\n'),
-    )
+    .setDescription(lines.join('\n'))
     .setTimestamp(event.createdAt)
-    .setFooter({
-      text: `fomo · ${chain?.label ?? (event.networkId ? `network ${event.networkId}` : 'unknown chain')}`,
-    })
+    .setFooter({ text: 'fomo' })
 
-  const links = fomoLinks(event)
-  if (links) embed.addFields({ name: 'Links', value: links })
+  applyFomoIdentity(embed, event)
+
+  const holding = event.position?.usdValue
+  const pnl = fomoPnl(event)
+  if (holding !== undefined) {
+    embed.addFields({ name: 'Holding', value: formatCompactUsd(holding), inline: pnl !== undefined })
+  }
+  if (pnl) embed.addFields({ name: 'PnL', value: pnl, inline: holding !== undefined })
+
+  const ca = fomoCaField(event)
+  if (ca) embed.addFields(ca)
+  const links = fomoVenueLinks(event, fomoChainLabel(event))
+  if (links) embed.addFields({ name: '\u200b', value: links })
   return embed
 }
 
+function fomoMcapLine(event: FomoActivityEvent): string {
+  return statBlock(statLine('MCap', [event.marketCap !== undefined && formatCompactUsd(event.marketCap)]))
+}
+
+/** Author row: name, handle, profile link, avatar. Image only when the URL is http(s). */
+function applyFomoIdentity(embed: EmbedBuilder, event: FomoActivityEvent): void {
+  const name = event.traderName
+  const handle = event.traderHandle
+  const label = name && handle ? `${name} (@${handle})` : name ?? (handle ? `@${handle}` : undefined)
+  if (label) {
+    const url = handle ? fomoProfileUrl(handle) : undefined
+    const iconURL = httpUrl(event.traderAvatarUrl)
+    embed.setAuthor({
+      name: label.slice(0, 256),
+      ...(url ? { url } : {}),
+      ...(iconURL ? { iconURL } : {}),
+    })
+  }
+  const image = httpUrl(event.tokenImageUrl)
+  if (image) embed.setThumbnail(image)
+}
+
+function fomoTraderLink(event: FomoActivityEvent): string {
+  const name = event.traderName ?? event.traderHandle ?? 'someone'
+  const url = event.traderHandle ? fomoProfileUrl(event.traderHandle) : undefined
+  return url ? `[${mdLabel(name)}](${url})` : mdLabel(name)
+}
+
+function fomoTickerLink(event: FomoActivityEvent): string {
+  if (!event.ticker) return 'a token'
+  const label = `$${mdLabel(event.ticker).replace(/^\$/, '')}`
+  const url = event.chainId && event.tokenAddress ? fomoUrl(event.chainId, event.tokenAddress) : undefined
+  return url ? `[${label}](${url})` : label
+}
+
+function fomoChainLabel(event: FomoActivityEvent): string | undefined {
+  if (event.chainId) return getChain(event.chainId)?.label
+  if (event.networkId) return `network ${event.networkId}`
+  return undefined
+}
+
+function fomoCaField(event: FomoActivityEvent): { name: string; value: string } | undefined {
+  if (!event.tokenAddress) return undefined
+  return { name: 'CA', value: `\`${event.tokenAddress.replace(/`/g, '')}\`` }
+}
+
 /**
- * Links for a Fomo event.
+ * FOMO and GMGN, in that order, for chains each venue actually covers.
  *
- * Reuses `fomoUrl`, whose chain-slug map was confirmed against real links rather
- * than guessed - a chain it does not cover produces no link instead of a 404,
- * which is the right outcome in an alert someone may act on.
+ * An optional chain prefix is how a thesis names the network beside the links.
+ * A missing venue is left out. Axiom is not here: see `fomoTradeEmbed`.
  */
-function fomoLinks(event: FomoActivityEvent): string | undefined {
-  if (!event.chainId || !event.tokenAddress) return undefined
+function fomoVenueLinks(event: FomoActivityEvent, prefix?: string): string | undefined {
+  if (!event.chainId || !event.tokenAddress) return prefix
   const parts: string[] = []
   const fomo = fomoUrl(event.chainId, event.tokenAddress)
-  if (fomo) parts.push(`[fomo](${fomo})`)
-  const explorer = explorerUrl(event.chainId, event.tokenAddress)
-  if (explorer) parts.push(`[explorer](${explorer})`)
-  parts.push(`\`${truncateAddress(event.tokenAddress)}\``)
-  return parts.join(' · ')
+  if (fomo) parts.push(`[FOMO](${fomo})`)
+  const gmgn = gmgnUrl(event.chainId, event.tokenAddress)
+  if (gmgn) parts.push(`[GMGN](${gmgn})`)
+  if (parts.length === 0) return prefix
+  return prefix ? `${prefix} · ${parts.join(' · ')}` : parts.join(' · ')
+}
+
+/** Dollar PnL with the sign in front of the $, plus the percent when Fomo sent it. */
+function fomoPnl(event: FomoActivityEvent): string | undefined {
+  const usd = event.position?.unrealizedPnlUsd
+  const pct = event.position?.percentageUnrealizedPnl
+  if (usd === undefined && pct === undefined) return undefined
+  const signSource = usd ?? pct ?? 0
+  const mark = signSource > 0 ? '🟢' : signSource < 0 ? '🔴' : '⚪'
+  const parts: string[] = []
+  if (usd !== undefined) parts.push(signedCompactUsd(usd))
+  if (pct !== undefined) parts.push(`(${formatPercent(pct)})`)
+  return `${mark} ${parts.join(' ')}`
+}
+
+function signedCompactUsd(value: number): string {
+  const body = formatCompactUsd(Math.abs(value))
+  if (value > 0) return `+${body}`
+  if (value < 0) return `-${body}`
+  return body
+}
+
+/** Text that is about to sit inside `[label](url)`. Brackets would break the link. */
+function mdLabel(text: string): string {
+  return text.replace(/[\[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim() || 'unknown'
+}
+
+function httpUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    return url.toString()
+  } catch {
+    return undefined
+  }
 }

@@ -103,12 +103,16 @@ export interface FomoActivityEvent {
   traderHandle?: string
   traderName?: string
   traderVerified: boolean
+  /** Fomo's profile picture, when the payload carried one. */
+  traderAvatarUrl?: string
 
   /** Our chain id from `chains.ts`, or undefined when Fomo's networkId is unmapped. */
   chainId?: string
   networkId?: number
   tokenAddress?: string
   ticker?: string
+  /** Token image from the payload. Shown on the alert; never invented. */
+  tokenImageUrl?: string
 
   /** Present on BUY/SELL. Fomo sends no token amount and no transaction hash. */
   usdAmount?: number

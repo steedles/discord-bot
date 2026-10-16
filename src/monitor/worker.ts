@@ -105,6 +105,8 @@ interface Destination {
 
 interface MonitorCandidate extends Candidate {
   snapshot: MarketSnapshot
+  /** Dip recovery replies to the drawdown message when we still have its id. */
+  replyToMessageId?: string
   /** Present for whale alerts - the transaction the alert is about. */
   swap?: WhaleSwap
   /**
@@ -529,11 +531,30 @@ export class VolumeMonitorWorker {
       const price = snapshot.priceUsd
       if (price !== undefined && price > 0 && price < state.lowPriceUsd) {
         state.lowPriceUsd = price
-        await noteDipLow(destination.channelId, snapshot.chainId, snapshot.tokenAddress, price)
+        const lowMcap = snapshot.marketCapUsd
+        if (lowMcap !== undefined && Number.isFinite(lowMcap) && lowMcap > 0) {
+          state.lowMarketCapUsd = lowMcap
+        } else {
+          delete state.lowMarketCapUsd
+        }
+        await noteDipLow(
+          destination.channelId,
+          snapshot.chainId,
+          snapshot.tokenAddress,
+          price,
+          state.lowMarketCapUsd,
+        )
       }
 
       const trigger = detectRecovery(snapshot, state, dipConfig)
-      return trigger ? { tokenKey: key, trigger, snapshot } : undefined
+      return trigger
+        ? {
+            tokenKey: key,
+            trigger,
+            snapshot,
+            ...(state.alertMessageId ? { replyToMessageId: state.alertMessageId } : {}),
+          }
+        : undefined
     }
 
     const trigger = this.triggerFor(destination, snapshot, history)
@@ -1009,7 +1030,11 @@ export class VolumeMonitorWorker {
    * `armedForMinutes` is read here rather than at arm-design time so an admin
    * lengthening the wait affects dips announced from now on.
    */
-  private async settleDip(destination: Destination, candidate: MonitorCandidate): Promise<void> {
+  private async settleDip(
+    destination: Destination,
+    candidate: MonitorCandidate,
+    messageId: string | undefined,
+  ): Promise<void> {
     const { snapshot, trigger } = candidate
 
     if (trigger.kind === 'recovery') {
@@ -1020,6 +1045,7 @@ export class VolumeMonitorWorker {
     const price = snapshot.priceUsd
     if (price === undefined || price <= 0) return
 
+    const mcap = snapshot.marketCapUsd
     await armDip({
       guildId: destination.guildId,
       channelId: destination.channelId,
@@ -1027,7 +1053,9 @@ export class VolumeMonitorWorker {
       tokenAddress: snapshot.tokenAddress,
       symbol: snapshot.symbol,
       alertPriceUsd: price,
+      ...(mcap !== undefined && Number.isFinite(mcap) && mcap > 0 ? { alertMarketCapUsd: mcap } : {}),
       armedForMinutes: destination.read.num('armedForMinutes', 360),
+      ...(messageId ? { alertMessageId: messageId } : {}),
     })
   }
 
@@ -1056,8 +1084,13 @@ export class VolumeMonitorWorker {
       const embed = monitorAlertEmbed(trigger, snapshot, context, swap)
       if (card) embed.setImage(ATTACHMENT_URL)
 
-      await channel.send({
+      const sent = await channel.send({
         ...(ping ? { content: ping.content, allowedMentions: ping.allowed } : {}),
+        // A deleted dip message must not cost the recovery. Discord then posts
+        // it on its own instead of failing the send.
+        ...(candidate.replyToMessageId
+          ? { reply: { messageReference: candidate.replyToMessageId, failIfNotExists: false } }
+          : {}),
         embeds: [embed],
         ...(card ? { files: [card.attachment] } : {}),
       })
@@ -1090,7 +1123,7 @@ export class VolumeMonitorWorker {
       // Arming after the send, for the same reason the cooldown is: a dip
       // nobody was told about must not produce a recovery alert.
       if (destination.feature.id === DIP_HUNTER.id) {
-        await this.settleDip(destination, candidate)
+        await this.settleDip(destination, candidate, sent.id)
       }
 
       log.monitor.info(

@@ -110,7 +110,7 @@ export class DashboardServer {
     }
 
     if (this.options.fomoWatch) {
-      registerFomoRoutes(app, this.options.fomoWatch)
+      registerFomoRoutes(app, this.options.fomoWatch, this.client)
     }
 
     const devSession = this.options.devLoginSessionId

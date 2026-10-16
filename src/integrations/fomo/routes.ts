@@ -1,10 +1,16 @@
+import type { Client } from 'discord.js'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { config } from '../../config.js'
+import type { Session } from '../../db/models.js'
 import { log } from '../../logger.js'
-import { requireSession } from '../../web/auth.js'
+import { requireGuildAccess, requireSession } from '../../web/auth.js'
+import { guildIdsForSession } from '../../web/access.js'
 import type { FomoWatchWorker } from '../../workers/fomo-watch.js'
 import { listAlerts, listTrades, recordTrade, tradeSummary } from './alert-store.js'
+import { listEnabledPushInstances } from '../../db/features.js'
+import { FOMO_WATCH } from '../../features/definitions/fomo-watch.js'
+import { listKnownAccounts, prepareRoute, routesByGuild, saveRoute } from './routing.js'
 import { fomoStream, type FomoStreamEvent } from './stream.js'
 
 /**
@@ -64,7 +70,63 @@ const TradeQuery = z.object({
 /** How often to write an SSE comment so idle connections are not reaped. */
 const KEEPALIVE_MS = 25_000
 
-export function registerFomoRoutes(app: FastifyInstance, worker: FomoWatchWorker): void {
+const RouteBody = z.object({
+  restricted: z.boolean(),
+  handles: z.array(z.string().max(80)).max(500),
+})
+
+/**
+ * Discord servers this session is allowed to configure.
+ *
+ * A password login reaches every guild the bot is in, unless the Access tab
+ * has limited that login. A Discord login reaches only the guilds it held
+ * Manage Server on when it signed in, and only while the bot is still in them.
+ */
+async function visibleGuilds(session: Session, client: Client): Promise<{ id: string; name: string }[]> {
+  const ids = await guildIdsForSession(session, new Set(client.guilds.cache.keys()))
+
+  return ids
+    .map((id) => ({ id, name: client.guilds.cache.get(id)?.name ?? id }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function channelLabel(client: Client, channelId: string): string {
+  const channel = client.channels.cache.get(channelId)
+  if (channel && 'name' in channel && typeof channel.name === 'string' && channel.name.length > 0) {
+    return `#${channel.name}`
+  }
+  return 'a channel'
+}
+
+/**
+ * Where this server currently receives Fomo alerts.
+ *
+ * Only an enabled Fomo Watch row with a channel posts. A server with none
+ * is still listed, so the admin can see that it is hearing nobody.
+ */
+async function guildsWithChannels(
+  session: Session,
+  client: Client,
+): Promise<{ id: string; name: string; channels: { id: string; name: string }[] }[]> {
+  const guilds = await visibleGuilds(session, client)
+  const allowed = new Set(guilds.map((guild) => guild.id))
+  const instances = await listEnabledPushInstances(FOMO_WATCH.id)
+
+  const channelsByGuild = new Map<string, { id: string; name: string }[]>()
+  for (const instance of instances) {
+    if (!instance.channelId || !allowed.has(instance.guildId)) continue
+    const list = channelsByGuild.get(instance.guildId) ?? []
+    list.push({ id: instance.channelId, name: channelLabel(client, instance.channelId) })
+    channelsByGuild.set(instance.guildId, list)
+  }
+
+  return guilds.map((guild) => ({
+    ...guild,
+    channels: (channelsByGuild.get(guild.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
+  }))
+}
+
+export function registerFomoRoutes(app: FastifyInstance, worker: FomoWatchWorker, client: Client): void {
   if (!config.FOMO_ENABLED) {
     log.fomo.info('fomo ingest not mounted - FOMO_ENABLED is false')
     return
@@ -139,6 +201,77 @@ export function registerFomoRoutes(app: FastifyInstance, worker: FomoWatchWorker
 
   /** Health for `/monitor status` and for anyone asking why it is quiet. */
   app.get('/api/fomo/health', async (_request, reply) => reply.send(worker.health.snapshot()))
+
+  /**
+   * Which Discord servers hear which followed accounts.
+   *
+   * The account list is whoever has already appeared on the feed, plus any
+   * handle a server was given before that account had posted. A server with
+   * no saved row is reported as unrestricted, which is also how the worker
+   * treats it.
+   */
+  app.get('/api/fomo/routing', async (request, reply) => {
+    const session = await requireSession(request, reply)
+    if (!session) return
+
+    const guilds = await guildsWithChannels(session, client)
+    const allowed = new Set(guilds.map((guild) => guild.id))
+    const [accounts, routes] = await Promise.all([listKnownAccounts(), routesByGuild()])
+
+    const extra = new Set(accounts.map((account) => account.handle))
+    for (const route of routes.values()) {
+      if (!allowed.has(route.guildId)) continue
+      for (const handle of route.handles) extra.add(handle)
+    }
+
+    return reply.send({
+      guilds,
+      accounts: [...extra]
+        .sort()
+        .map((handle) => accounts.find((account) => account.handle === handle) ?? { handle }),
+      routes: guilds.map((guild) => {
+        const route = routes.get(guild.id)
+        return {
+          guildId: guild.id,
+          restricted: route?.restricted ?? false,
+          handles: route?.handles ?? [],
+          updatedAt: route?.updatedAt,
+        }
+      }),
+    })
+  })
+
+  app.put<{ Params: { guildId: string } }>('/api/fomo/routing/:guildId', async (request, reply) => {
+    const session = await requireGuildAccess(
+      request,
+      reply,
+      request.params.guildId,
+      new Set(client.guilds.cache.keys()),
+    )
+    if (!session) return
+
+    const parsed = RouteBody.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid routing' })
+
+    const prepared = prepareRoute(parsed.data.restricted, parsed.data.handles)
+    if (!prepared.ok) {
+      return reply.code(400).send({ error: 'Invalid account handles', invalid: prepared.invalid })
+    }
+
+    const route = await saveRoute(request.params.guildId, prepared.route, session.userId)
+    log.fomo.info(
+      { guildId: route.guildId, restricted: route.restricted, handles: route.handles.length, by: session.userId },
+      'fomo server routing saved',
+    )
+    return reply.send({
+      route: {
+        guildId: route.guildId,
+        restricted: route.restricted,
+        handles: route.handles,
+        updatedAt: route.updatedAt,
+      },
+    })
+  })
 
   app.get('/api/fomo/alerts', async (request, reply) => {
     if (!(await requireSession(request, reply))) return

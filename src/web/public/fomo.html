@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Kanto Control Room · Fomo Feed</title>
+    <title>Steedles Control Room · Fomo Feed</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/fomo.css" />
     <link
@@ -54,6 +54,30 @@
         </div>
       </section>
 
+      <section class="fomo-routing" id="routing" aria-label="Which servers hear which accounts">
+        <div class="fomo-routing-head">
+          <h2 class="eyebrow">Which Discord server hears what</h2>
+          <p class="hint">
+            Each box is one Discord server. Everyone sends that server every alert. Only these
+            accounts limits it to the handles you tick. Save applies to that server only.
+          </p>
+        </div>
+        <div id="routing-list"></div>
+        <form class="fomo-add" id="routing-add" autocomplete="off">
+          <label class="fomo-add-label" for="routing-handle">Add a Fomo account you can tick</label>
+          <input
+            type="text"
+            id="routing-handle"
+            name="handle"
+            placeholder="@handle"
+            aria-label="Fomo account handle"
+            maxlength="80"
+          />
+          <button class="btn btn-sm" type="submit">Add</button>
+          <span class="fomo-add-error" id="routing-add-error"></span>
+        </form>
+      </section>
+
       <div class="fomo-cols">
         <main class="fomo-main">
           <div class="fomo-toolbar">
@@ -93,6 +117,6 @@
       </div>
     </div>
 
-    <script type="module" src="/fomo.js"></script>
+    <script type="module" src="/fomo.js?v=20261013"></script>
   </body>
 </html>

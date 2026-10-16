@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fomoSupports, fomoUrl } from '../fomo.js'
+import { fomoProfileUrl, fomoSupports, fomoUrl } from '../fomo.js'
 
 describe('fomoUrl', () => {
   it('builds the token page for a Solana mint', () => {
@@ -40,5 +40,17 @@ describe('fomoUrl', () => {
 
   it('offers nothing without an address', () => {
     expect(fomoUrl('solana', '')).toBeUndefined()
+  })
+})
+
+describe('fomoProfileUrl', () => {
+  it('builds the profile page from the handle', () => {
+    expect(fomoProfileUrl('frankdegods')).toBe('https://fomo.family/profile/frankdegods')
+  })
+
+  it('offers nothing for a handle that would change the path', () => {
+    expect(fomoProfileUrl('a/b')).toBeUndefined()
+    expect(fomoProfileUrl('a b')).toBeUndefined()
+    expect(fomoProfileUrl('')).toBeUndefined()
   })
 })

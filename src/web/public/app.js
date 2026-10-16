@@ -16,7 +16,7 @@ const state = {
   stats: null,
   open: new Set(), // expanded rows, by scope key
   drafts: new Map(), // unsaved edits, by scope key
-  view: 'features', // 'features' | 'charts' | 'history' | 'watchlist' | 'wallets' | 'board' | 'alerts' | 'setup' | 'holdings'
+  view: 'features', // 'features' | 'charts' | 'history' | 'watchlist' | 'wallets' | 'board' | 'alerts' | 'setup' | 'holdings' | 'access'
   chartCards: new Map(), // live-charts DOM cards, by `${chainId}:${pairAddress}`
   chartsTimer: null,
   lastCharts: [], // most recent poll's natural (unpinned) order, for instant re-pin without a fetch
@@ -42,6 +42,7 @@ const state = {
   // so they're offered first rather than requiring a re-typed contract address for something already watched.
   holdingsCards: new Map(), // holdings-grid DOM cards, same keying as chartCards
   holdingsTimer: null,
+  access: null,
   setup: null, // the Setup tab's status, as returned by /api/guilds/:id/setup
   setupJob: null, // the job being watched after Connect / Restart, or null
   setupPollTimer: null,
@@ -68,8 +69,7 @@ const CHARTS_POLL_MS = 30_000
 const HOLDINGS_POLL_MS = 30_000
 
 /** True only for a local (email/password) login as the bot's owner - see routes.ts. */
-const OWNER_EMAIL = 'wayne@steedman.co.za'
-const isOwner = () => Boolean(state.me?.user?.local && state.me.user.username?.toLowerCase() === OWNER_EMAIL)
+const isOwner = () => Boolean(state.me?.user?.owner)
 
 // A row is identified by feature + place. Channel rows use the channel id;
 // the server-wide row uses an empty string.
@@ -161,7 +161,7 @@ function renderSignIn() {
   document.getElementById('app').innerHTML = `
     <div class="signin">
       <div class="tick">◢</div>
-      <h1>Kanto Control Room</h1>
+      <h1>Steedles Control Room</h1>
       <p>
         Sign in to configure features per channel. Discord shows you every server
         where you have <strong>Manage Server</strong>; an account below reaches
@@ -298,6 +298,13 @@ function render() {
     return
   }
 
+  if (state.view === 'access' && isOwner()) {
+    app.innerHTML = `${topbar()}${accessShell()}`
+    wireTopbar()
+    loadAccess()
+    return
+  }
+
   if (state.view === 'holdings' && isOwner()) {
     app.innerHTML = `${topbar()}${holdingsShell()}`
     wireTopbar()
@@ -328,17 +335,19 @@ function topbar() {
         <button class="viewtab${state.view === 'board' ? ' active' : ''}" data-view="board">My Charts</button>
         <button class="viewtab${state.view === 'alerts' ? ' active' : ''}" data-view="alerts">My Alerts</button>
         <button class="viewtab${state.view === 'setup' ? ' active' : ''}" data-view="setup">Setup</button>
+        ${isOwner() ? `<button class="viewtab${state.view === 'access' ? ' active' : ''}" data-view="access">Access</button>` : ''}
         ${isOwner() ? `<button class="viewtab${state.view === 'holdings' ? ' active' : ''}" data-view="holdings">Holdings</button>` : ''}
       </nav>`
     : ''
 
   return `
     <header class="topbar">
-      <div class="brand"><span class="tick">◢</span> Kanto Control Room <span class="ver">v0.2</span></div>
+      <div class="brand"><span class="tick">◢</span> Steedles Control Room <span class="ver">v0.2</span></div>
       ${tabs}
       ${state.me.guilds.length ? `<select class="guild-select" id="guild">${options}</select>` : ''}
       <div class="spacer"></div>
       <div class="user"><span class="dot"></span>${esc(state.me.user.username)}</div>
+      <a class="btn btn-sm" href="/fomo">Fomo</a>
       <button class="btn btn-sm" id="logout">Sign out</button>
     </header>`
 }
@@ -2275,6 +2284,153 @@ function renderSetupJobs() {
   </table>`
 }
 
+// ----------------------------------------------------------------- access
+
+const accessDrafts = new Map()
+
+function accessShell() {
+  return `
+    <div class="setup-view">
+      <div class="charts-head">
+        <h2>Access</h2>
+        <span class="hint">Password logins see every server until you limit them here. A Discord login still only sees servers where that person has Manage Server.</span>
+      </div>
+      <div id="access-list"><div class="empty">Loading…</div></div>
+    </div>`
+}
+
+async function loadAccess() {
+  const list = document.getElementById('access-list')
+  if (!list) return
+  try {
+    state.access = await api('/api/access')
+  } catch (err) {
+    list.innerHTML = `<div class="banner">Could not load access: ${esc(err.message)}</div>`
+    return
+  }
+  if (state.view !== 'access') return
+  for (const account of state.access.accounts ?? []) {
+    if (!accessDrafts.has(account.email)) {
+      accessDrafts.set(account.email, {
+        restricted: account.restricted,
+        guildIds: new Set(account.guildIds),
+        status: '',
+        bad: false,
+        saving: false,
+      })
+    }
+  }
+  renderAccess()
+}
+
+function renderAccess() {
+  const list = document.getElementById('access-list')
+  const data = state.access
+  if (!list || !data) return
+  const accounts = data.accounts ?? []
+  const guilds = data.guilds ?? []
+  if (accounts.length === 0) {
+    list.innerHTML = '<div class="empty">No password logins are configured.</div>'
+    return
+  }
+
+  list.innerHTML = accounts
+    .map((account) => {
+      const draft = accessDrafts.get(account.email)
+      if (account.owner) {
+        return `<section class="setup-card">
+          <div class="setup-card-head">
+            <h3>${esc(account.email)}</h3>
+            <span class="hint">Every server. This login edits access, so it cannot be limited.</span>
+          </div>
+        </section>`
+      }
+      const picks = draft.restricted
+        ? `<div class="access-picks">${guilds
+            .map(
+              (guild) => `<label class="access-pick">
+                <input type="checkbox" data-access-guild="${esc(account.email)}" value="${esc(guild.id)}"${draft.guildIds.has(guild.id) ? ' checked' : ''} />
+                ${esc(guild.name)}
+              </label>`,
+            )
+            .join('')}</div>
+          ${draft.guildIds.size === 0 ? '<p class="hint">Nothing ticked — this login will not be able to open any server.</p>' : ''}`
+        : ''
+      return `<section class="setup-card">
+        <div class="setup-card-head">
+          <h3>${esc(account.email)}</h3>
+          <div class="access-toggle">
+            <button type="button" class="access-mode${draft.restricted ? '' : ' is-on'}" data-access-mode="${esc(account.email)}" data-restricted="0">Every server</button>
+            <button type="button" class="access-mode${draft.restricted ? ' is-on' : ''}" data-access-mode="${esc(account.email)}" data-restricted="1">Selected servers</button>
+          </div>
+        </div>
+        ${picks}
+        <div class="setup-actions">
+          <button type="button" class="btn btn-sm btn-primary" data-access-save="${esc(account.email)}"${draft.saving ? ' disabled' : ''}>Save</button>
+          <span class="${draft.bad ? 'access-bad' : 'hint'}">${esc(draft.status)}</span>
+        </div>
+      </section>`
+    })
+    .join('')
+
+  list.querySelectorAll('[data-access-mode]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const draft = accessDrafts.get(button.dataset.accessMode)
+      if (!draft) return
+      const restricted = button.dataset.restricted === '1'
+      if (draft.restricted === restricted) return
+      draft.restricted = restricted
+      draft.status = ''
+      renderAccess()
+    })
+  })
+  list.querySelectorAll('[data-access-guild]').forEach((box) => {
+    box.addEventListener('change', () => {
+      const draft = accessDrafts.get(box.dataset.accessGuild)
+      if (!draft) return
+      if (box.checked) draft.guildIds.add(box.value)
+      else draft.guildIds.delete(box.value)
+      draft.status = ''
+      renderAccess()
+    })
+  })
+  list.querySelectorAll('[data-access-save]').forEach((button) => {
+    button.addEventListener('click', () => void saveAccess(button.dataset.accessSave))
+  })
+}
+
+async function saveAccess(email) {
+  const draft = accessDrafts.get(email)
+  if (!draft || draft.saving) return
+  draft.saving = true
+  draft.bad = false
+  draft.status = 'Saving…'
+  renderAccess()
+  try {
+    const saved = await api(`/api/access/${encodeURIComponent(email)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ restricted: draft.restricted, guildIds: [...draft.guildIds] }),
+    })
+    const account = state.access?.accounts?.find((row) => row.email === email)
+    if (account) {
+      account.restricted = saved.account.restricted
+      account.guildIds = saved.account.guildIds
+    }
+    draft.restricted = saved.account.restricted
+    draft.guildIds = new Set(saved.account.guildIds)
+    draft.bad = false
+    draft.status = saved.account.restricted
+      ? `Saved · ${saved.account.guildIds.length} server${saved.account.guildIds.length === 1 ? '' : 's'}`
+      : 'Saved · every server'
+  } catch (err) {
+    draft.bad = true
+    draft.status = err.message
+  } finally {
+    draft.saving = false
+    renderAccess()
+  }
+}
+
 // ----------------------------------------------------------------- holdings
 
 /**
@@ -3020,6 +3176,7 @@ const HASH_BY_VIEW = {
   alerts: '#/alerts',
   setup: '#/setup',
   holdings: '#/holdings',
+  access: '#/access',
 }
 const VIEW_BY_HASH = {
   '': 'features',
@@ -3032,6 +3189,7 @@ const VIEW_BY_HASH = {
   '#/alerts': 'alerts',
   '#/setup': 'setup',
   '#/holdings': 'holdings',
+  '#/access': 'access',
 }
 
 const hashForView = (view) => HASH_BY_VIEW[view] ?? ''
@@ -3040,7 +3198,7 @@ const hashForView = (view) => HASH_BY_VIEW[view] ?? ''
 // the API 403s regardless, this just avoids showing a dead end.
 const viewFromHash = (hash) => {
   const view = VIEW_BY_HASH[hash] ?? 'features'
-  return view === 'holdings' && !isOwner() ? 'features' : view
+  return (view === 'holdings' || view === 'access') && !isOwner() ? 'features' : view
 }
 
 // Covers back/forward and a hash typed or pasted directly into the address

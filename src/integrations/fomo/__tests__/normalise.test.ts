@@ -30,6 +30,8 @@ describe('normaliseActivity', () => {
     expect(e.usdAmount).toBe(FIXTURES.swap_buy.usdAmount)
     expect(e.ticker).toBe(FIXTURES.swap_buy.ticker)
     expect(e.traderHandle).toBe(FIXTURES.swap_buy.userHandle)
+    expect(e.traderAvatarUrl).toBe(FIXTURES.swap_buy.profilePictureLink)
+    expect(e.tokenImageUrl).toBe(FIXTURES.swap_buy.tokenImageUrl)
     expect(e.createdAt.toISOString()).toBe(new Date(FIXTURES.swap_buy.createdAt!).toISOString())
   })
 

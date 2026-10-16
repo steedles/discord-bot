@@ -1,3 +1,4 @@
+import { formatCompactUsd } from '../../market/format.js'
 import type { MarketSnapshot } from '../providers/types.js'
 import type { Reading, Trigger } from './types.js'
 
@@ -42,14 +43,27 @@ export interface DipConfig {
 export interface ArmedDip {
   /** Price when the drawdown alert was posted. Recovery is measured from this. */
   alertPriceUsd: number
+  /** Market cap at that same moment, when the snapshot had one. Display only. */
+  alertMarketCapUsd?: number
   /** Lowest price seen since that alert. */
   lowPriceUsd: number
+  /** Market cap on the reading that set the post-alert low. */
+  lowMarketCapUsd?: number
   /** Epoch ms the dip was announced. */
   armedAt: number
+  /** Discord message of the dip alert, so the recovery can reply to it. */
+  alertMessageId?: string
 }
 
 export interface WindowHigh {
   priceUsd: number
+  /**
+   * Market cap of the reading that set the high.
+   *
+   * Absent when that reading did not carry one. The drawdown is still measured
+   * on price; this is only what the alert is allowed to quote.
+   */
+  marketCapUsd?: number
   /** Epoch ms the high was recorded. */
   at: number
   /** How many readings the high was drawn from. */
@@ -72,11 +86,12 @@ export function windowHigh(
   const cutoff = now - windowMs
 
   let high: number | undefined
+  let highMcap: number | undefined
   let highAt = now
   let oldestAt = now
   let samples = 0
 
-  const consider = (priceUsd: number | undefined, at: number): void => {
+  const consider = (priceUsd: number | undefined, at: number, marketCapUsd?: number): void => {
     if (priceUsd === undefined || !Number.isFinite(priceUsd) || priceUsd <= 0) return
     if (at < cutoff || at > now) return
 
@@ -85,15 +100,25 @@ export function windowHigh(
     if (high === undefined || priceUsd > high) {
       high = priceUsd
       highAt = at
+      highMcap =
+        marketCapUsd !== undefined && Number.isFinite(marketCapUsd) && marketCapUsd > 0
+          ? marketCapUsd
+          : undefined
     }
   }
 
-  consider(snapshot.priceUsd, now)
-  for (const reading of history) consider(reading.priceUsd, reading.at)
+  consider(snapshot.priceUsd, now, snapshot.marketCapUsd)
+  for (const reading of history) consider(reading.priceUsd, reading.at, reading.marketCapUsd)
 
   if (high === undefined) return undefined
 
-  return { priceUsd: high, at: highAt, samples, coveredMs: now - oldestAt }
+  return {
+    priceUsd: high,
+    ...(highMcap !== undefined ? { marketCapUsd: highMcap } : {}),
+    at: highAt,
+    samples,
+    coveredMs: now - oldestAt,
+  }
 }
 
 /** Fires when a token is far enough below its own recent high. */
@@ -116,6 +141,7 @@ export function detectDrawdown(
 
   const spanMinutes = Math.round(high.coveredMs / 60_000)
   const highAgoMinutes = Math.round((snapshot.fetchedAt - high.at) / 60_000)
+  const nowMcap = positive(snapshot.marketCapUsd)
 
   return {
     kind: 'drawdown',
@@ -126,7 +152,11 @@ export function detectDrawdown(
     priority: dropPct >= config.highPriorityDrawdownPct ? 'high' : 'normal',
     score: dropPct / Math.max(1, config.drawdownPct),
     detail: [
-      `High ${price$(high.priceUsd)} ${highAgoMinutes}m ago, now ${price$(price)}`,
+      // Market cap is what a reader compares across coins. Price stays the
+      // measurement, and the fallback when the high reading has no cap.
+      nowMcap !== undefined && high.marketCapUsd !== undefined
+        ? `High ${formatCompactUsd(high.marketCapUsd)} ${highAgoMinutes}m ago, now ${formatCompactUsd(nowMcap)}`
+        : `High ${price$(high.priceUsd)} ${highAgoMinutes}m ago, now ${price$(price)}`,
       `Measured over ${spanMinutes}m of recorded readings (${high.samples} samples)`,
     ],
   }
@@ -154,12 +184,19 @@ export function detectRecovery(
   if (price < target) return undefined
 
   const gainPct = ((price - armed.alertPriceUsd) / armed.alertPriceUsd) * 100
+  const nowMcap = positive(snapshot.marketCapUsd)
+  const alertMcap = positive(armed.alertMarketCapUsd)
   const detail = [
-    `Alert price ${price$(armed.alertPriceUsd)}, target ${price$(target)} (+${config.recoveryPct}%)`,
-    `Now ${price$(price)}`,
+    nowMcap !== undefined && alertMcap !== undefined
+      ? `Alert mcap ${formatCompactUsd(alertMcap)}, now ${formatCompactUsd(nowMcap)} (+${gainPct.toFixed(1)}%)`
+      : `Alert price ${price$(armed.alertPriceUsd)}, now ${price$(price)} (+${gainPct.toFixed(1)}%)`,
   ]
 
-  if (Number.isFinite(armed.lowPriceUsd) && armed.lowPriceUsd > 0) {
+  const lowMcap = positive(armed.lowMarketCapUsd)
+  if (nowMcap !== undefined && lowMcap !== undefined) {
+    const fromLowPct = ((nowMcap - lowMcap) / lowMcap) * 100
+    detail.push(`Post-alert low ${formatCompactUsd(lowMcap)}, up ${fromLowPct.toFixed(1)}% from it`)
+  } else if (Number.isFinite(armed.lowPriceUsd) && armed.lowPriceUsd > 0) {
     const fromLowPct = ((price - armed.lowPriceUsd) / armed.lowPriceUsd) * 100
     detail.push(`Post-alert low ${price$(armed.lowPriceUsd)}, up ${fromLowPct.toFixed(1)}% from it`)
   }
@@ -169,7 +206,7 @@ export function detectRecovery(
 
   return {
     kind: 'recovery',
-    headline: `${gainPct.toFixed(1)}% recovery from the alert price`,
+    headline: `${gainPct.toFixed(1)}% recovery from the alert`,
     value: gainPct,
     threshold: config.recoveryPct,
     priority: 'normal',
@@ -182,6 +219,11 @@ export function detectRecovery(
  * Prices here span nine orders of magnitude, so a fixed number of decimals is
  * either noise or `$0.00`.
  */
+function positive(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return undefined
+  return value
+}
+
 function price$(value: number): string {
   if (value >= 1) return `$${value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}`
   if (value >= 0.0001) return `$${value.toPrecision(4)}`

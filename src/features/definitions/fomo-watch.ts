@@ -13,11 +13,15 @@ import type { FeatureDescriptor } from '../types.js'
  * Enable this feature in each channel and switch off what that channel does not
  * want: a trades channel turns Theses off, a thesis channel turns Buys and
  * Sells off. That is the ordinary channel-row-replaces-server-row resolution
- * every other feature uses - no per-feature routing code exists, or should.
+ * every other feature uses. Which server hears which followed account is a
+ * separate table, edited on the Fomo feed page, and is applied before these
+ * channel filters.
  *
- * The upstream is not ours to filter: `trading_activity` carries exactly the
+ * The upstream is not ours to widen: `trading_activity` carries exactly the
  * accounts the Fomo account follows. Adding a trader means following them in
- * Fomo's UI; there is no setting here that can do it.
+ * Fomo's UI. Which Discord server hears which of those accounts is the
+ * routing table on the Fomo feed page, applied before the per-channel
+ * filters below.
  */
 export const FOMO_WATCH: FeatureDescriptor = {
   id: 'fomo-watch',
@@ -32,8 +36,8 @@ export const FOMO_WATCH: FeatureDescriptor = {
       'Real-time activity from fomo.family: every buy, sell and thesis posted by a trader the linked Fomo account follows, forwarded as it happens.',
       'To split them across channels, enable this feature in each one and turn off what it should not carry - a `#fomo-trades` channel with Theses off, a `#fomo-thesis` channel with Buys and Sells off. Settings are per channel, so the two do not interfere.',
       'A buy and its thesis are **separate events**, typically about a minute apart, and are posted separately rather than merged. Folding them together would mean holding every buy back for a minute on the chance a thesis follows, which would make the fastest signal here the slowest.',
-      'Who appears is decided in Fomo, not here: the feed carries the accounts your Fomo account follows and nothing else. Follow someone there and they show up; there is no list in this dashboard that can add them.',
-      'Fomo publishes no transaction hash and no token amount, so alerts report USD value, price and market cap. Nothing is estimated to fill those gaps.',
+      'Who is followed is decided in Fomo: the feed carries the accounts that one Fomo login follows. Which Discord server hears which of those accounts is set on the Fomo feed page. A server left on "everyone" hears the whole feed; a limited server hears only the accounts ticked for it.',
+      'Fomo publishes no transaction hash and no token amount, so a trade shows the USD size and the market cap Fomo reported, with the token image when Fomo sent one. The trader links to their Fomo profile and the ticker links to the token page. A thesis links to that same token page, which is where Fomo shows the thesis. Nothing is estimated to fill the gaps.',
     ],
     seeAlso: [
       '`/monitor status` - whether the Fomo feed is connected and when it last delivered',
@@ -81,7 +85,7 @@ export const FOMO_WATCH: FeatureDescriptor = {
       type: 'multiselect',
       label: 'Only these traders',
       description:
-        'Leave empty for everyone your Fomo account follows. This narrows that list; it cannot widen it.',
+        'Leave empty to use the server routing from the Fomo feed page. A selection here narrows that list for this channel only; it cannot add an account the server was not given.',
       default: [],
       options: [],
       emptyMeansAll: true,
