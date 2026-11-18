@@ -2,19 +2,41 @@ node_modules/
 dist/
 *.log
 
-# secrets
+# secrets — real values stay on the machine that runs the bot
 .env
 .env.*
 !.env.example
 deploy/homelab/.env.homelab
+deploy/homelab/cloudflared/config.yml
+deploy/homelab/cloudflared/*.json
 
 # credential scratch files - never commit these
 discord-creds.txt
 *creds*.txt
 *secret*.txt
+*api-key*.txt
+*apikey*.txt
+etherscan.txt
 *.pem
 *.key
+*.p12
+*.pfx
+
+# wallet private keys, seed phrases, keystores
+# public addresses in env are fine; these names are key material
+id.json
+keypair.json
+*-keypair.json
+*.keystore
+phrases.txt
+recovery.txt
+*mnemonic*
+*seed-phrase*
+*seedphrase*
 
 .DS_Store
 .idea/
 .vscode/
+
+# Windows reserved-name junk that shows up in this tree
+/NUL
